@@ -10,6 +10,9 @@ namespace sb64::menu
     const std::vector<Item>& items()
     {
         static const std::vector<Item> list {
+            { id::tempo,         "BPM" },
+            { id::clock,         "CLK" },
+            { id::swing,         "SWG" },
             { id::lfoShape,      "LFO" },
             { id::lfoSync,       "SYN" },
             { id::lfoRange,      "RNG" },
@@ -67,7 +70,10 @@ namespace sb64::menu
         if (paramId == id::lfoPhase)
             return juce::String (whole * 45);
 
-        if (paramId == id::slideTime || paramId == id::accentVel || paramId == id::pitchEnvDepth || paramId == id::bendRange)
+        if (paramId == id::clock)
+            return whole != 0 ? "HST" : "INT";
+
+        if (paramId == id::tempo || paramId == id::swing || paramId == id::slideTime || paramId == id::accentVel || paramId == id::pitchEnvDepth || paramId == id::bendRange)
             return juce::String (whole);
 
         if (paramId == id::tune)

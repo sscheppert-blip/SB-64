@@ -37,7 +37,16 @@ namespace sb64::params
         inline constexpr const char* bendRange     = "bendRange";
         inline constexpr const char* tune          = "tune";
         inline constexpr const char* volume        = "volume";
+
+        // sequencer
+        inline constexpr const char* run   = "run";
+        inline constexpr const char* tempo = "tempo";
+        inline constexpr const char* clock = "clock";
+        inline constexpr const char* swing = "swing";
     }
+
+    // clock choices
+    enum class ClockSource { internal, host };
 
     // synced LFO: cycles per quarter note for each LFO RATE position, low and high range
     inline constexpr int numLfoDivisions = 10;
@@ -47,5 +56,6 @@ namespace sb64::params
     int lfoDivisionIndex (float rateKnob);
     double lfoCyclesPerBeat (float rateKnob, bool highRange);
 
-    juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
+    // standalone: the clock defaults to INT (there is no host to follow)
+    juce::AudioProcessorValueTreeState::ParameterLayout createLayout (bool standalone = false);
 }

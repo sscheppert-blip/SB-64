@@ -16,6 +16,9 @@ namespace sb64::dsp
     enum class Wave { square, saw, triangle };
     enum class FilterMode { bandPass, lowPass };
 
+    // how a note follows the one before while the gate is still on
+    enum class Transition { retrigger, legato, slide };
+
     // knob mappings, shared with the display
     float cutoffHz (float knob) noexcept;            // 30 Hz .. 17.6 kHz
     float vcaDecaySeconds (float knob) noexcept;     // 40 ms .. 5 s, the top of the range holds (drone)
@@ -55,9 +58,10 @@ namespace sb64::dsp
         void prepare (double sampleRate);
         void setSettings (const Settings&) noexcept;
 
-        // note in semitones (MIDI numbering, fractions allowed). With slide and the gate still on, the
-        // pitch glides from the current note and the envelopes keep running.
-        void noteOn (float note, bool accent, bool slide) noexcept;
+        // note in semitones (MIDI numbering, fractions allowed). With the gate still on, legato jumps
+        // to the new pitch and slide glides there (over glideSeconds, else the slide time setting);
+        // both keep the envelopes running.
+        void noteOn (float note, bool accent, Transition, float glideSeconds = -1.0f) noexcept;
         void noteOff() noexcept;
         void setBend (float semitones) noexcept { bend = semitones; }
         void panic() noexcept;

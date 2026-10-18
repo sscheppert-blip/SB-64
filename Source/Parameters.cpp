@@ -41,7 +41,7 @@ namespace sb64::params
         return highRange ? lfoDivisionsHigh[i] : lfoDivisionsLow[i];
     }
 
-    Layout createLayout()
+    Layout createLayout (bool standalone)
     {
         Layout layout;
 
@@ -90,6 +90,15 @@ namespace sb64::params
             juce::ParameterID { id::tune, 1 }, "Tune", juce::NormalisableRange<float> (-10.0f, 10.0f, 0.1f), 0.0f,
             juce::AudioParameterFloatAttributes().withLabel ("Hz")));
         addKnob (layout, id::volume, "Volume", 0.7f);
+
+        layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { id::run, 1 }, "Run", false));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { id::tempo, 1 }, "Tempo", juce::NormalisableRange<float> (20.0f, 480.0f, 1.0f), 120.0f,
+            juce::AudioParameterFloatAttributes().withLabel ("BPM")));
+        layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { id::clock, 1 }, "Clock",
+                                                                  juce::StringArray { "Internal", "Host" }, standalone ? 0 : 1));
+        layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::swing, 1 }, "Swing", 0, 50, 0,
+                                                               juce::AudioParameterIntAttributes().withLabel ("%")));
 
         return layout;
     }

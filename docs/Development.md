@@ -19,7 +19,8 @@ The test runner also has a few tools:
 
 - `--render <wav> [option…]` plays a short acid riff (16ths at 125 BPM, with accents and slides) and
   writes it as a mono WAV. Options: `<paramId>=<value>` (plain values, e.g. `cutoff=0.3 wave=0
-  filterMode=0`), `seconds=<n>`, `note=<n>` to hold one note instead of the riff.
+  filterMode=0`), `seconds=<n>`, `note=<n>` to hold one note instead of the riff, `seq` to play the
+  selected pattern (the demo in A1) on the sequencer at 125 BPM instead.
 - `--snapshot <png> [scale]` renders the panel (design size 1580 × 960 at scale 1).
 - `--icon <png>` renders the app icon (`design/icon.png`, 1024 px, used by the Standalone app).
 - `--bench` measures the CPU load.

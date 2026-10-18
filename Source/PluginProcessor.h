@@ -5,6 +5,8 @@
 #include <juce_dsp/juce_dsp.h>
 #include <clap-juce-extensions/clap-juce-extensions.h>
 
+#include "Patterns.h"
+#include "dsp/Sequencer.h"
 #include "dsp/Voice.h"
 
 class SB64AudioProcessor final : public juce::AudioProcessor,
@@ -45,9 +47,21 @@ public:
     // the step keys play notes like a keyboard (message thread)
     juce::MidiKeyboardState& getKeyboardState() noexcept { return keyboardState; }
 
+    sb64::Patterns& getPatterns() noexcept { return patterns; }
+
+    // REC: notes from the step keys or MIDI go into the pattern – while stopped one step after the
+    // other from the record position, while playing into the step at hand (or the next one, when the
+    // note comes in its second half)
+    void setRecording (bool on) noexcept { recording = on; }
+    bool isRecording() const noexcept { return recording.load(); }
+    int getRecordStep() const noexcept { return recordStep.load(); }
+    void setRecordStep (int step) noexcept { recordStep = juce::jlimit (0, sb64::seq::maxSteps - 1, step); }
+
     struct Display
     {
         std::atomic<bool> gate { false }, accent { false }, lfoHigh { false };
+        std::atomic<bool> running { false };   // the sequencer plays
+        std::atomic<int> step { -1 };           // step playing
         std::atomic<float> bpm { 120.0f };
         std::atomic<float> peak { 0.0f };   // max since the panel last read it
         std::atomic<int> note { -1 };       // last played note
@@ -63,6 +77,7 @@ private:
     sb64::dsp::Settings readSettings (double bpm) const noexcept;
     void handleMidi (const juce::MidiMessage&) noexcept;
     void playNote (int note, int velocity, bool slide) noexcept;
+    void record (int note, int velocity) noexcept;
 
     juce::AudioProcessorValueTreeState state;
 
@@ -71,10 +86,16 @@ private:
         std::atomic<float>* drive, * detune, * vcaEnv, * vcfEnv, * resonance, * cutoff, * fmLevel, * subLevel,
                           * noiseLevel, * lfoRate, * lfoLevel, * envAmount, * wave, * filterMode,
                           * lfoShape, * lfoSync, * lfoRange, * lfoReset, * lfoPhase, * slideTime, * accentVel,
-                          * pitchEnvDepth, * pitchEnvDecay, * bendRange, * tune, * volume;
+                          * pitchEnvDepth, * pitchEnvDecay, * bendRange, * tune, * volume,
+                          * run, * tempo, * clock, * swing;
     } refs {};
 
     sb64::dsp::Voice voice;
+    sb64::seq::Sequencer sequencer;
+    sb64::Patterns patterns;
+    std::atomic<bool> recording { false };
+    std::atomic<int> recordStep { 0 };
+    bool wasRunning = false;
     juce::MidiKeyboardState keyboardState;
 
     // held notes, oldest first; the newest one sounds

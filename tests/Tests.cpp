@@ -4,6 +4,7 @@
 #include "Parameters.h"
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
+#include "Patterns.h"
 #include "dsp/Lfo.h"
 #include "dsp/Voice.h"
 
@@ -35,7 +36,7 @@ namespace
         dsp::Voice voice;
         voice.setSettings (s);
         voice.prepare (testRate);
-        voice.noteOn (note, accent, false);
+        voice.noteOn (note, accent, dsp::Transition::retrigger);
 
         std::vector<float> out ((size_t) (seconds * testRate));
         const auto gateEnd = gateSeconds < 0.0 ? out.size() : (size_t) (gateSeconds * testRate);
@@ -248,11 +249,11 @@ static void testSlideAndPitchEnv()
     s.slideSeconds = 0.1f;
     voice.setSettings (s);
     voice.prepare (testRate);
-    voice.noteOn (45.0f, false, false);
+    voice.noteOn (45.0f, false, dsp::Transition::retrigger);
 
     std::vector<float> out ((size_t) (0.6 * testRate));
     voice.render (out.data(), (int) (0.2 * testRate));
-    voice.noteOn (57.0f, false, true);   // slide up an octave
+    voice.noteOn (57.0f, false, dsp::Transition::slide);   // slide up an octave
     voice.render (out.data() + (size_t) (0.2 * testRate), (int) (out.size() - (size_t) (0.2 * testRate)));
 
     const auto before = frequencyOf (out, (size_t) (0.1 * testRate), (size_t) (0.2 * testRate));
@@ -448,10 +449,313 @@ static void testEditor()
 }
 
 //==============================================================================
+// Sequencer
+
+namespace
+{
+    namespace seq = sb64::seq;
+
+    // Host transport for the processor tests
+    struct TestPlayHead final : juce::AudioPlayHead
+    {
+        double ppq = 0.0, bpm = 120.0;
+        bool playing = false;
+
+        juce::Optional<PositionInfo> getPosition() const override
+        {
+            PositionInfo info;
+            info.setBpm (bpm);
+            info.setPpqPosition (ppq);
+            info.setIsPlaying (playing);
+            return info;
+        }
+    };
+
+    // 48 kHz, blocks of 100 samples; at 120 BPM a 16th lasts 6000 samples (60 blocks)
+    struct SeqRig
+    {
+        SB64AudioProcessor processor;
+        juce::AudioBuffer<float> buffer { 2, 100 };
+        TestPlayHead head;
+        int64_t sample = 0;
+
+        SeqRig (bool host = false)
+        {
+            processor.setPlayConfigDetails (0, 2, 48000.0, 100);
+            processor.prepareToPlay (48000.0, 100);
+            setParam (processor, id::clock, host ? 1.0f : 0.0f);
+            setParam (processor, id::tempo, 120.0f);
+            setParam (processor, id::vcaEnv, 0.97f);   // a drone: the level only drops when the gate ends
+            pattern().clear();
+
+            if (host)
+                processor.setPlayHead (&head);
+        }
+
+        seq::Pattern& pattern() { return processor.getPatterns().selected(); }
+
+        void setStep (int index, int note, int gate = 50, bool accent = false, bool slide = false)
+        {
+            seq::Step s;
+            s.on = true;
+            s.note = note;
+            s.gate = gate;
+            s.accent = accent;
+            s.slide = slide;
+            pattern().set (index, s);
+        }
+
+        // runs the given number of blocks; returns the gate state after each one
+        std::vector<bool> run (int blocks, juce::MidiBuffer midi = {})
+        {
+            std::vector<bool> gates;
+
+            for (int i = 0; i < blocks; ++i)
+            {
+                buffer.clear();
+                auto events = i == 0 ? midi : juce::MidiBuffer();
+                processor.processBlock (buffer, events);
+                if (head.playing)
+                    head.ppq += 100.0 * head.bpm / 60.0 / 48000.0;
+                sample += 100;
+                gates.push_back (processor.getDisplay().gate.load());
+            }
+
+            return gates;
+        }
+
+        int step() { return processor.getDisplay().step.load(); }
+    };
+}
+
+static void testSequencer()
+{
+    {
+        SeqRig rig;
+        rig.setStep (0, 45, 50);
+        rig.setStep (4, 47, 25);
+        rig.run (5);
+        check (! rig.processor.getDisplay().running.load() && rig.step() < 0, "the sequencer waits for PLAY");
+
+        setParam (rig.processor, id::run, 1.0f);
+        auto gates = rig.run (60 * 6);
+        check (gates[0] && gates[25] && ! gates[31], "gate 50 % lasts half a step");
+        check (! gates[61] && ! gates[200], "empty steps stay silent");
+        check (gates[241] && gates[250] && ! gates[257], "gate 25 % on step 5");
+        check (rig.step() == 5, "the playing step advances with the clock");
+
+        // last step: four steps loop
+        rig.pattern().setLast (3);
+        rig.run (60 * 4);
+        bool inRange = true;
+        for (int i = 0; i < 60 * 8; ++i)
+        {
+            rig.run (1);
+            inRange = inRange && rig.step() >= 0 && rig.step() <= 3;
+        }
+        check (inRange, "LAST STEP shortens the loop");
+
+        setParam (rig.processor, id::run, 0.0f);
+        rig.run (2);
+        check (! rig.processor.getDisplay().running.load() && ! rig.processor.getDisplay().gate.load(), "STOP ends the note");
+    }
+
+    {
+        // slide holds the gate into the next step; gate 100 % joins the next note too
+        SeqRig rig;
+        rig.setStep (0, 45, 50, false, true);
+        rig.setStep (1, 57, 100);
+        rig.setStep (2, 45, 50);
+        setParam (rig.processor, id::run, 1.0f);
+        const auto gates = rig.run (60 * 3);
+        bool held = true;
+        for (int i = 0; i < 150; ++i)
+            held = held && gates[(size_t) i];
+        check (held, "slide and gate 100 % keep the gate on across steps");
+        check (! gates[175], "a normal step after them ends its gate");
+    }
+
+    {
+        // swing delays every second 16th by up to half a step
+        SeqRig rig;
+        rig.setStep (0, 45, 10);
+        rig.setStep (1, 45, 10);
+        setParam (rig.processor, id::swing, 50.0f);
+        setParam (rig.processor, id::run, 1.0f);
+        const auto gates = rig.run (120);
+        check (! gates[65] && ! gates[85] && gates[92], "swing delays the offbeat");
+    }
+
+    {
+        // host clock: the step follows the bar position
+        SeqRig rig (true);
+        for (int i = 0; i < 16; ++i)
+            rig.setStep (i, 45);
+        setParam (rig.processor, id::run, 1.0f);
+        rig.head.ppq = 1.0;   // beat 2 = step 5
+        rig.run (2);
+        check (rig.step() < 0, "host clock waits while the host is stopped");
+        rig.head.playing = true;
+        rig.run (1);
+        check (rig.step() == 4, "host clock starts at the host's position");
+        rig.head.ppq = 3.5;   // jump to the 15th 16th
+        rig.run (1);
+        check (rig.step() == 14, "host clock follows a locate");
+    }
+
+    {
+        // a pattern chosen while playing waits for the end of the playing one
+        SeqRig rig;
+        rig.setStep (0, 45);
+        auto& patterns = rig.processor.getPatterns();
+        patterns.pattern (1).clear();
+        setParam (rig.processor, id::run, 1.0f);
+        rig.run (60 * 2);
+        patterns.select (1, true);
+        rig.run (60 * 2);
+        check (patterns.playingIndex() == 0 && patterns.isQueued(), "a new pattern waits while one plays");
+        rig.run (60 * 13);
+        check (patterns.playingIndex() == 1 && ! patterns.isQueued(), "the queued pattern starts after the last step");
+    }
+
+    {
+        // REC while stopped: notes go into one step after the other
+        SeqRig rig;
+        rig.processor.setRecording (true);
+        rig.processor.setRecordStep (2);
+        juce::MidiBuffer notes;
+        notes.addEvent (juce::MidiMessage::noteOn (1, 50, (juce::uint8) 90), 0);
+        notes.addEvent (juce::MidiMessage::noteOff (1, 50), 10);
+        notes.addEvent (juce::MidiMessage::noteOn (1, 52, (juce::uint8) 127), 20);
+        rig.run (2, notes);
+        const auto a = rig.pattern().get (2), b = rig.pattern().get (3);
+        check (a.on && a.note == 50 && ! a.accent && b.on && b.note == 52 && b.accent, "step recording writes notes in order");
+        check (rig.processor.getRecordStep() == 4, "step recording moves on");
+
+        // REC while playing: into the step at hand
+        setParam (rig.processor, id::run, 1.0f);
+        rig.run (60 * 5 + 10);   // just into step 6
+        juce::MidiBuffer live;
+        live.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 90), 0);
+        rig.run (1, live);
+        check (rig.pattern().get (5).on && rig.pattern().get (5).note == 60, "live recording lands on the nearest step");
+    }
+
+    {
+        // patterns are saved with the project
+        SB64AudioProcessor processor;
+        auto& p = processor.getPatterns().pattern (2 * 16 + 4);   // C5
+        seq::Step s;
+        s.on = true; s.note = 40; s.gate = 80; s.accent = true; s.slide = true;
+        p.set (33, s);
+        p.setLast (47);
+        processor.getPatterns().select (2 * 16 + 4, false);
+
+        juce::MemoryBlock saved;
+        processor.getStateInformation (saved);
+        SB64AudioProcessor other;
+        other.setStateInformation (saved.getData(), (int) saved.getSize());
+        auto& q = other.getPatterns().pattern (2 * 16 + 4);
+        check (q.get (33) == s && q.last() == 47 && other.getPatterns().selectedIndex() == 2 * 16 + 4, "patterns save and load");
+        check (! other.getPatterns().pattern (0).isEmpty(), "the demo pattern stays");
+        check (sb64::Patterns::name (2 * 16 + 4) == "C5" && sb64::Patterns::name (127) == "H16", "pattern names");
+    }
+}
+
+static void testPanelSequencing()
+{
+    SB64AudioProcessor processor;
+    std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditor());
+    auto& panel = dynamic_cast<SB64AudioProcessorEditor&> (*editor).getPanel();
+    auto& patterns = processor.getPatterns();
+    patterns.selected().clear();
+    auto& p = patterns.selected();
+
+    panel.pressKey (3);
+    check (p.get (3).on && panel.getSelectedStep() == 3, "a click switches an empty step on and selects it");
+    panel.turnNote (2);
+    check (p.get (3).note == 50 && panel.getDisplayText() == "D3", "NOTE sets the selected step's note");
+    panel.turnSelect (2);
+    check (p.get (3).gate == 60, "GATE sets its gate");
+    panel.octave (1);
+    check (p.get (3).note == 62, "+1 OCT moves the step up an octave");
+    panel.pressKey (3);
+    check (! p.get (3).on, "a second click switches it off");
+    panel.back();
+    check (panel.getSelectedStep() < 0, "BACK leaves the step");
+
+    // SHIFT + ACC: the keys set accents
+    panel.setShift (true);
+    panel.pressKey (0);
+    panel.pressKey (5);
+    check (p.get (5).accent && ! p.get (5).on, "SHIFT + ACC turns the keys into accent switches");
+    panel.back();
+    panel.setShift (true);
+    panel.pressKey (1);
+    panel.pressKey (6);
+    check (p.get (6).slide, "SHIFT + SLIDE sets slides");
+    panel.back();
+
+    // bars
+    panel.showBar (2);
+    panel.pressKey (0);
+    check (p.get (32).on, "BAR shows the third bar");
+
+    // LAST STEP
+    panel.setShift (true);
+    panel.pressKey (4);
+    panel.pressKey (15);
+    check (p.last() == 47, "SHIFT + LAST STEP, then a key sets the last step");
+    panel.showBar (0);
+
+    // COPY, PATTERN, PASTE
+    panel.setShift (true);
+    panel.pressKey (12);
+    panel.setShift (true);
+    panel.pressKey (15);
+    panel.pressKey (2);
+    check (patterns.selectedIndex() == 2, "SHIFT + PATTERN, then a key picks the pattern");
+    panel.setShift (true);
+    panel.pressKey (13);
+    check (patterns.pattern (2).get (32).on && patterns.pattern (2).last() == 47, "COPY and PASTE copy a pattern");
+
+    // BANK
+    panel.setShift (true);
+    panel.pressKey (14);
+    panel.pressKey (3);
+    check (patterns.selectedIndex() == 3 * 16 + 2, "SHIFT + BANK, then a key picks the bank");
+
+    // CLEAR needs a second press
+    patterns.select (2, false);
+    panel.setShift (true);
+    panel.pressKey (11);
+    panel.pressKey (5);
+    check (! patterns.pattern (2).isEmpty(), "CLEAR is cancelled by another key");
+    panel.setShift (true);
+    panel.pressKey (11);
+    panel.pressKey (11);
+    check (patterns.pattern (2).isEmpty(), "CLEAR, CLEAR empties the pattern");
+
+    // PLAY / STOP
+    panel.play();
+    check (processor.getState().getRawParameterValue (id::run)->load() > 0.5f, "PLAY starts the sequencer");
+    panel.stop();
+    check (processor.getState().getRawParameterValue (id::run)->load() < 0.5f, "STOP stops it");
+
+    // REC turns the keys into a keyboard
+    panel.setRecording (true);
+    panel.pressKey (0);
+    check (processor.getKeyboardState().isNoteOn (1, 36), "in REC the keys play notes");
+    panel.releaseKey (0);
+    panel.setRecording (false);
+}
+
+//==============================================================================
 // A little acid riff on the internal clock for listening: 16th notes at 125 BPM. Options:
 //   seconds=<n>            length (default 8 s)
 //   <paramId>=<value>      plain parameter value (e.g. cutoff=0.3 wave=0)
 //   note=<n>               hold one note instead of the riff
+//   seq                    play the selected pattern (the demo in A1) on the sequencer instead
 static bool renderToFile (const juce::String& path, const juce::StringArray& options)
 {
     constexpr int sampleRate = 48000, block = 480;
@@ -461,6 +765,7 @@ static bool renderToFile (const juce::String& path, const juce::StringArray& opt
 
     double seconds = 8.0;
     int heldNote = -1;
+    bool useSequencer = false;
 
     for (const auto& option : options)
     {
@@ -471,6 +776,8 @@ static bool renderToFile (const juce::String& path, const juce::StringArray& opt
             seconds = value.getDoubleValue();
         else if (key == "note")
             heldNote = value.getIntValue();
+        else if (option == "seq")
+            useSequencer = true;
         else if (processor.getState().getParameter (key) != nullptr)
             setParam (processor, key, value.getFloatValue());
         else
@@ -497,7 +804,16 @@ static bool renderToFile (const juce::String& path, const juce::StringArray& opt
     {
         juce::MidiBuffer midi;
 
-        if (heldNote >= 0)
+        if (useSequencer)
+        {
+            if (start == 0)
+            {
+                setParam (processor, id::clock, 0.0f);
+                setParam (processor, id::tempo, 125.0f);
+                setParam (processor, id::run, 1.0f);
+            }
+        }
+        else if (heldNote >= 0)
         {
             if (start == 0)
                 midi.addEvent (juce::MidiMessage::noteOn (1, heldNote, (juce::uint8) 90), 0);
@@ -637,6 +953,8 @@ int main (int argc, char** argv)
     testProcessor();
     testMenu();
     testEditor();
+    testSequencer();
+    testPanelSequencing();
 
     std::printf ("\n%s (%d failure%s)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures, failures == 1 ? "" : "s");
     return failures == 0 ? 0 : 1;

@@ -133,6 +133,7 @@ namespace sb64::ui
         SegmentDisplay();
 
         void setText (const juce::String&);   // up to three characters, numbers right-aligned
+        juce::String getText() const { return text.removeCharacters ("!"); }
         void paint (juce::Graphics&) override;
 
     private:

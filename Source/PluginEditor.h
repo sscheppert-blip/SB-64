@@ -5,6 +5,11 @@
 
 // The front panel, laid out in design coordinates (designWidth x designHeight, as in
 // design/mockup.html) and scaled as a whole.
+//
+// Step keys show one bar of the selected pattern: a click on an empty step switches it on and
+// selects it, a click on the selected step switches it off; SELECT/GATE and BACK/NOTE then set its gate
+// and note. SHIFT + key = the function printed under it. In REC the keys are a keyboard whose notes go
+// into the pattern.
 class FrontPanel final : public juce::Component,
                          private juce::Timer
 {
@@ -17,18 +22,39 @@ public:
 
     void paint (juce::Graphics&) override;
 
-    // shows a text on the segment display for a while (then back to the tempo or the open menu)
+    // shows a text on the segment display for a while
     void showText (const juce::String&, double seconds = 1.5);
 
-private:
-    void timerCallback() override;
-    void updateDisplay (double now);
-    void updateKeys();
-    void selectMenu (int steps);
-    void changeMenuValue (int steps, bool fine);
-    void pressKey (int key, bool accent);
+    // for the tests: the panel's controls by name
+    void pressKey (int key, bool shiftModifier = false);
     void releaseKey (int key);
     void setShift (bool on);
+    void turnSelect (int steps, bool fine = false);
+    void turnNote (int steps, bool fine = false);
+    void back();
+    void play();
+    void stop();
+    void setRecording (bool on);
+    void showBar (int bar);
+    void octave (int direction);
+    int getSelectedStep() const noexcept { return selectedStep; }
+    juce::String getDisplayText() const { return display->getText(); }
+
+private:
+    // what the step keys do without SHIFT
+    enum class KeyMode { steps, accent, slide };
+    // a function waiting for a step key
+    enum class Pending { none, lastStep, bank, pattern, clear };
+
+    void timerCallback() override;
+    void updateDisplay (double now);
+    void updateKeys (double now);
+    void selectMenu (int steps);
+    void openMenuAt (const char* paramId);
+    void changeMenuValue (int steps, bool fine);
+    void function (int key);
+    void choose (int key);
+    sb64::seq::Pattern& pattern();
 
     template <typename T, typename... Args>
     T& make (Args&&... args)
@@ -49,17 +75,27 @@ private:
     sb64::ui::Led* gateLed = nullptr;
     sb64::ui::Led* accentLed = nullptr;
     sb64::ui::Led* lfoLed = nullptr;
+    sb64::ui::RoundButton* shiftButton = nullptr;
+    sb64::ui::RoundButton* playButton = nullptr;
+    sb64::ui::RoundButton* recButton = nullptr;
     std::array<sb64::ui::StepKey*, numKeys> keys {};
-    std::array<int, numKeys> keyNotes {};   // the note each held key started (-1 = up)
+    std::array<int, numKeys> keyNotes {};   // the note each held key started in REC (-1 = up)
 
-    // segment display: a transient text, else the open menu, else the tempo
+    // segment display: a transient text, the open menu, a pending function, else the step or tempo
     juce::String transientText;
     double transientUntil = 0.0, menuUntil = 0.0, menuNameUntil = 0.0;
     int menuIndex = 0;
     double clipUntil = 0.0;
 
-    int baseNote = 36;   // the first step key plays C2
+    KeyMode keyMode = KeyMode::steps;
+    Pending pending = Pending::none;
+    int bar = 0, selectedStep = -1;
+    bool followPlayhead = true;   // the shown bar follows the playing step until BAR is pressed
+    int baseNote = 36;            // REC keyboard: the first key plays C2
     bool shift = false;
+
+    sb64::seq::Pattern clipboard;
+    bool hasClipboard = false;
 };
 
 class SB64AudioProcessorEditor final : public juce::AudioProcessorEditor
@@ -68,6 +104,7 @@ public:
     explicit SB64AudioProcessorEditor (SB64AudioProcessor&);
 
     void resized() override;
+    FrontPanel& getPanel() noexcept { return panel; }
 
 private:
     static constexpr int minWidth = 790, maxWidth = 2370, defaultWidth = 1185;

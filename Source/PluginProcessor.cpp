@@ -6,11 +6,17 @@ namespace
 {
     namespace id = sb64::params::id;
     constexpr const char* editorWidthProperty = "editorWidth";
+
+    // the step after the given one within the pattern's first..last
+    int nextInPattern (const sb64::seq::Pattern& p, int step)
+    {
+        return step < p.first() || step >= p.last() ? p.first() : step + 1;
+    }
 }
 
 SB64AudioProcessor::SB64AudioProcessor()
     : AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      state (*this, nullptr, "SB64", sb64::params::createLayout())
+      state (*this, nullptr, "SB64", sb64::params::createLayout (wrapperType == wrapperType_Standalone))
 {
     auto raw = [this] (const char* paramId)
     {
@@ -33,6 +39,8 @@ SB64AudioProcessor::SB64AudioProcessor()
     refs.pitchEnvDecay = raw (id::pitchEnvDecay);
     refs.bendRange = raw (id::bendRange);   refs.tune = raw (id::tune);
     refs.volume = raw (id::volume);
+    refs.run = raw (id::run);               refs.tempo = raw (id::tempo);
+    refs.clock = raw (id::clock);           refs.swing = raw (id::swing);
 
     heldNotes.reserve (128);
 }
@@ -55,6 +63,8 @@ void SB64AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
     voice.setSettings (readSettings ((double) display.bpm.load()));
     voice.prepare (sampleRate * oversamplingFactor);
+    sequencer.prepare (sampleRate);
+    wasRunning = false;
     heldNotes.clear();
     hostWasPlaying = false;
 }
@@ -100,8 +110,34 @@ sb64::dsp::Settings SB64AudioProcessor::readSettings (double bpm) const noexcept
 void SB64AudioProcessor::playNote (int note, int velocity, bool slide) noexcept
 {
     const auto accent = velocity >= juce::roundToInt (refs.accentVel->load());
-    voice.noteOn ((float) note, accent, slide);
+    voice.noteOn ((float) note, accent, slide ? sb64::dsp::Transition::slide : sb64::dsp::Transition::retrigger);
     display.note = note;
+}
+
+void SB64AudioProcessor::record (int note, int velocity) noexcept
+{
+    auto& pattern = patterns.selected();
+    int target;
+
+    if (sequencer.isRunning() && sequencer.getPosition() >= 0)
+    {
+        // quantised to the nearest step
+        target = sequencer.getPosition();
+        if (sequencer.getProgress() > 0.5f)
+            target = nextInPattern (pattern, target);
+    }
+    else
+    {
+        target = juce::jlimit (pattern.first(), pattern.last(), recordStep.load());
+        recordStep = nextInPattern (pattern, target);
+    }
+
+    auto step = pattern.get (target);
+    step.on = true;
+    step.note = juce::jlimit (sb64::seq::lowestNote, sb64::seq::highestNote, note);
+    step.accent = velocity >= juce::roundToInt (refs.accentVel->load());
+    step.slide = false;
+    pattern.set (target, step);
 }
 
 void SB64AudioProcessor::handleMidi (const juce::MidiMessage& message) noexcept
@@ -109,6 +145,10 @@ void SB64AudioProcessor::handleMidi (const juce::MidiMessage& message) noexcept
     if (message.isNoteOn())
     {
         const auto note = message.getNoteNumber();
+
+        if (recording.load())
+            record (note, message.getVelocity());
+
         const auto legato = ! heldNotes.empty();
         heldNotes.erase (std::remove (heldNotes.begin(), heldNotes.end(), note), heldNotes.end());
         heldNotes.push_back (note);
@@ -187,27 +227,42 @@ void SB64AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     if (oversampledBuffer.getNumSamples() < numSamples * oversamplingFactor)
         oversampledBuffer.setSize (1, numSamples * oversamplingFactor, false, false, true);
 
-    // render up to each MIDI event
+    // sequencer clock: its own tempo, or the host's beat position
+    sb64::seq::Clock clock;
+    clock.run = refs.run->load() > 0.5f;
+    clock.host = refs.clock->load() > 0.5f;
+    clock.hostPlaying = hostPlaying && hostPpq.hasValue();
+    clock.bpm = clock.host ? bpm : (double) refs.tempo->load();
+    clock.swing = refs.swing->load() * 0.01f;
+    const auto ppqPerSample = bpm / 60.0 / getSampleRate();
+    const auto ppqStart = hostPpq.hasValue() ? *hostPpq : 0.0;
+
+    if (! clock.host)
+        display.bpm = (float) clock.bpm;
+
+    // one host sample at a time: MIDI, sequencer, voice
     auto* oversampled = oversampledBuffer.getWritePointer (0);
-    int position = 0;
+    auto event = midi.cbegin();
 
-    auto renderTo = [&] (int end)
+    for (int i = 0; i < numSamples; ++i)
     {
-        if (end > position)
-        {
-            voice.render (oversampled + position * oversamplingFactor, (end - position) * oversamplingFactor);
-            position = end;
-        }
-    };
+        for (; event != midi.cend() && juce::jlimit (0, juce::jmax (0, numSamples - 1), (*event).samplePosition) <= i; ++event)
+            handleMidi ((*event).getMessage());
 
-    for (const auto event : midi)
-    {
-        renderTo (juce::jlimit (0, numSamples, event.samplePosition));
-        handleMidi (event.getMessage());
+        clock.ppq = ppqStart + ppqPerSample * i;
+        sequencer.process (voice, patterns, clock);
+        voice.render (oversampled + i * oversamplingFactor, oversamplingFactor);
     }
 
-    renderTo (numSamples);
     midi.clear();
+
+    // a stopped sequence starts again from its first step
+    if (wasRunning && ! sequencer.isRunning())
+        sequencer.reset();
+
+    wasRunning = sequencer.isRunning();
+    display.running = sequencer.isRunning();
+    display.step = sequencer.isRunning() ? sequencer.getPosition() : -1;
 
     // back to the host rate
     auto output = getBusBuffer (buffer, false, 0);
@@ -247,6 +302,7 @@ void SB64AudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     auto tree = state.copyState();
     tree.setProperty (editorWidthProperty, editorWidth.load(), nullptr);
+    tree.appendChild (patterns.toTree(), nullptr);
 
     if (const auto xml = tree.createXml())
         copyXmlToBinary (*xml, destData);
@@ -261,6 +317,10 @@ void SB64AudioProcessor::setStateInformation (const void* data, int sizeInBytes)
             auto tree = juce::ValueTree::fromXml (*xml);
             editorWidth = (int) tree.getProperty (editorWidthProperty, 0);
             tree.removeProperty (editorWidthProperty, nullptr);
+
+            const auto savedPatterns = tree.getChildWithName ("PATTERNS");
+            tree.removeChild (savedPatterns, nullptr);
+            patterns.fromTree (savedPatterns);
             state.replaceState (tree);
 
             // CLAP hosts expect a value rescan after a state load (the wrapper doesn't send one itself)

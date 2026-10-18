@@ -140,22 +140,31 @@ namespace sb64::dsp
         vcf.decayCoef = vcf.releaseCoef = decayCoefficient (vcfDecaySeconds (settings.vcfEnv) * stretch, sampleRate);
 
         pitchEnvCoef = decayCoefficient (pitchEnvSeconds (settings.pitchEnvDecay), sampleRate);
-        slideStep = (float) (1.0 / (std::max (0.001f, settings.slideSeconds) * sampleRate));
     }
 
-    void Voice::noteOn (float newNote, bool withAccent, bool slide) noexcept
+    void Voice::noteOn (float newNote, bool withAccent, Transition transition, float glideSeconds) noexcept
     {
         accent = withAccent;
         accentGain.target = accent ? 1.0f : normalLevel;
         accentOpen.target = accent ? accentOctaves : 0.0f;
         updateTimes();
 
-        if (slide && gate)
+        if (gate && transition == Transition::slide)
         {
             // glide from where the pitch is now; the envelopes keep running
             slideFrom = note;
             slideTo = newNote;
             slidePos = 0.0f;
+            const auto seconds = glideSeconds > 0.0f ? glideSeconds : settings.slideSeconds;
+            slideStep = (float) (1.0 / (std::max (0.001f, seconds) * sampleRate));
+            return;
+        }
+
+        if (gate && transition == Transition::legato)
+        {
+            // straight to the new pitch, without restarting the envelopes
+            note = slideFrom = slideTo = newNote;
+            slidePos = 1.0f;
             return;
         }
 

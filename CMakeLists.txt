@@ -50,7 +50,9 @@ juce_add_plugin(SB64
 set(SB64_SOURCES
     Source/dsp/Voice.cpp
     Source/dsp/Lfo.cpp
+    Source/dsp/Sequencer.cpp
     Source/Menu.cpp
+    Source/Patterns.cpp
     Source/Parameters.cpp
     Source/PluginProcessor.cpp
     Source/StandaloneApp.cpp
