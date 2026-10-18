@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SB-64 Panel Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Silkscreen&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #101011;
+    --panel-edge: #232325;
+    --rule: #3a3b3e;
+    --label: #f1f1f2;
+    --label-dim: #9a9ba0;
+    --accent: #b5e853;
+    --trig: #ff3b3b;
+    --trig-dim: #5a2424;
+    --key-legend: #b9babe;
+    --oled: #f4f6ff;
+  }
+  html, body { margin: 0; background: var(--bg); color: var(--label-dim);
+    font-family: Inter, "Helvetica Neue", Arial, sans-serif; }
+  .wrap { max-width: 1400px; margin: 0 auto; padding: 20px 16px 40px; }
+  svg { width: 100%; height: auto; display: block; user-select: none; }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; margin: 14px 4px 0; font-size: 14px; }
+  .bar b { color: #e2e3e5; font-weight: 600; }
+  .chips { display: flex; gap: 8px; }
+  .chip { width: 22px; height: 22px; border-radius: 6px; border: 2px solid transparent; cursor: pointer; padding: 0; }
+  .chip[aria-pressed="true"] { border-color: #fff; }
+  .knob { cursor: ns-resize; }
+  .sw, .key { cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <svg id="panel" viewBox="0 0 1580 960" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div class="bar">
+    <span><b>SB-64 · panel mockup</b> — original control order, matte groovebox finish.
+      Drag knobs, click switches and keys, <b>SHIFT</b> lights the step-key functions.</span>
+    <span class="chips" id="chips" aria-label="Accent colour"></span>
+  </div>
+</div>
+<script>
+const NS = "http://www.w3.org/2000/svg";
+const svg = document.getElementById("panel");
+const el = (tag, attrs = {}, parent = root) => {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  parent.appendChild(e);
+  return e;
+};
+let root = svg;
+const text = (x, y, str, attrs = {}, parent = root) => {
+  const t = el("text", { x, y, "text-anchor": "middle", "font-size": 15, fill: "var(--label)",
+    "font-weight": 500, ...attrs }, parent);
+  t.textContent = str;
+  return t;
+};
+
+// ── defs ──────────────────────────────────────────────────────────
+el("defs").innerHTML = `
+  <linearGradient id="panelGrad" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#2e2f31"/><stop offset="1" stop-color="#28292b"/>
+  </linearGradient>
+  <filter id="grain" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency="1.6" numOctaves="1" seed="7" result="n"/>
+    <feColorMatrix in="n" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.035 0"/>
+    <feComposite in2="SourceGraphic" operator="in"/>
+  </filter>
+  <radialGradient id="knobCap" cx="0.42" cy="0.36" r="0.8">
+    <stop offset="0" stop-color="#4a4b4f"/><stop offset="0.55" stop-color="#36373a"/><stop offset="1" stop-color="#232426"/>
+  </radialGradient>
+  <linearGradient id="knobSide" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#2a2b2d"/><stop offset="1" stop-color="#121213"/>
+  </linearGradient>
+  <linearGradient id="keyTop" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#2f3033"/><stop offset="1" stop-color="#1e1f21"/>
+  </linearGradient>
+  <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+    <feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="shadow" x="-40%" y="-40%" width="180%" height="200%">
+    <feDropShadow dx="0" dy="6" stdDeviation="5" flood-color="#000" flood-opacity="0.55"/>
+  </filter>`;
+
+// ── chassis ───────────────────────────────────────────────────────
+el("rect", { x: 0, y: 0, width: 1580, height: 960, rx: 18, fill: "var(--panel-edge)" });
+el("rect", { x: 8, y: 8, width: 1564, height: 944, rx: 14, fill: "url(#panelGrad)" });
+el("rect", { x: 8, y: 8, width: 1564, height: 944, rx: 14, fill: "#fff", filter: "url(#grain)" });
+for (const [x, y] of [[38, 38], [1542, 38], [38, 922], [1542, 922], [790, 922]]) {
+  el("circle", { cx: x, cy: y, r: 9, fill: "#1a1a1b" });
+  el("circle", { cx: x, cy: y, r: 6, fill: "#2c2d2f", stroke: "#111", "stroke-width": 1 });
+  el("circle", { cx: x, cy: y, r: 2.2, fill: "#151516" });
+}
+// everything below is laid out in the reference photo's coordinates
+root = el("g", { transform: "translate(-20 -335)" });
+
+text(805, 470, "SB-64", { "font-size": 54, "font-weight": 700, "letter-spacing": "0.32em" });
+
+// ── knob ──────────────────────────────────────────────────────────
+function knob(cx, cy, r, { bipolar = false, value = 0.4 } = {}) {
+  const g = el("g", { class: "knob" });
+  const pt = (a, rr) => [cx + rr * Math.sin(a * Math.PI / 180), cy - rr * Math.cos(a * Math.PI / 180)];
+  const arc = (from, to, rr) => {
+    const [x0, y0] = pt(from, rr), [x1, y1] = pt(to, rr);
+    return `M${x0} ${y0} A${rr} ${rr} 0 ${Math.abs(to - from) > 180 ? 1 : 0} 1 ${x1} ${y1}`;
+  };
+  const ringR = r + 9;
+  const ring = el("g", { opacity: 0 }, g);
+  el("path", { d: arc(-135, 135, ringR), stroke: "#3c3d41", "stroke-width": 3, fill: "none", "stroke-linecap": "round" }, ring);
+  const val = el("path", { stroke: "var(--accent)", "stroke-width": 3, fill: "none", "stroke-linecap": "round" }, ring);
+  el("circle", { cx, cy: cy + 5, r: r + 1, fill: "url(#knobSide)", filter: "url(#shadow)" }, g);
+  el("circle", { cx, cy, r, fill: "url(#knobCap)" }, g);
+  el("circle", { cx, cy, r: r - 0.5, fill: "none", stroke: "#57585c", "stroke-opacity": 0.35, "stroke-width": 1 }, g);
+  const dot = el("circle", { r: Math.max(3.5, r * 0.11), fill: "#f4f4f5" }, g);
+  const set = v => {
+    v = Math.min(1, Math.max(0, v));
+    g.dataset.v = v;
+    const a = -135 + 270 * v;
+    const [x, y] = pt(a, r * 0.68);
+    dot.setAttribute("cx", x); dot.setAttribute("cy", y);
+    const from = bipolar ? 0 : -135;
+    val.setAttribute("d", Math.abs(a - from) < 0.5 ? "" : arc(Math.min(from, a), Math.max(from, a), ringR));
+  };
+  set(value);
+  let y0 = 0, v0 = 0;
+  g.addEventListener("pointerenter", () => ring.setAttribute("opacity", 1));
+  g.addEventListener("pointerleave", e => { if (!g.hasPointerCapture?.(e.pointerId)) ring.setAttribute("opacity", 0); });
+  g.addEventListener("pointerdown", e => { y0 = e.clientY; v0 = +g.dataset.v; g.setPointerCapture(e.pointerId); });
+  g.addEventListener("pointermove", e => { if (g.hasPointerCapture(e.pointerId)) set(v0 + (y0 - e.clientY) / 220); });
+  g.addEventListener("pointerup", () => ring.setAttribute("opacity", 0));
+  g.addEventListener("dblclick", () => set(bipolar ? 0.5 : 0));
+}
+const K = (x, y, r, label, v, alt) => {
+  knob(x, y, r, { value: v });
+  text(x, y + r + 32, label, { "font-size": 16 });
+  if (alt) text(x, y + r + 52, alt, { "font-size": 14, fill: "var(--accent)" });
+};
+
+// top row
+K(185, 630, 62, "Drive", 0.62);
+K(405, 680, 52, "Detune", 0.55);
+K(610, 668, 44, "VCA Env", 0.4);
+K(1000, 668, 44, "VCF Env", 0.45);
+K(1205, 680, 52, "Resonance", 0.6);
+K(1425, 625, 62, "Cutoff", 0.58);
+// second row
+K(122, 885, 44, "FM Lvl", 0.15);
+K(327, 885, 44, "Sub Lvl", 0.35);
+K(530, 885, 44, "Noise Lvl", 0.1);
+K(705, 930, 46, "Select / Gate", 0.5);
+K(910, 930, 46, "Back / Note", 0.5);
+K(1083, 885, 44, "LFO Rate", 0.3);
+K(1290, 885, 44, "LFO Lvl", 0.25);
+K(1490, 885, 44, "Env/CV Lvl", 0.55, "Config");
+
+// ── switches ──────────────────────────────────────────────────────
+function switchSel(cx, cy, options, active, labelRight = true) {
+  const g = el("g", { class: "sw" });
+  el("rect", { x: cx - 18, y: cy - 21, width: 36, height: 44, rx: 9, fill: "#0e0e0f" }, g);
+  el("rect", { x: cx - 18, y: cy - 24, width: 36, height: 44, rx: 9, fill: "url(#keyTop)", stroke: "#3c3d40", "stroke-width": 1 }, g);
+  el("path", { d: `M${cx - 6} ${cy - 6} l6 6 l6 -6`, stroke: "var(--key-legend)", "stroke-width": 2.2, fill: "none", "stroke-linecap": "round", "stroke-linejoin": "round" }, g);
+  const h = 24, top = cy - (options.length - 1) * h / 2;
+  const items = options.map((o, i) => {
+    const y = top + i * h;
+    const lx = labelRight ? cx + 32 : cx - 32;
+    const led = el("circle", { cx: lx, cy: y - 1, r: 3.6 }, g);
+    const t = text(labelRight ? lx + 10 : lx - 10, y + 5, o, { "text-anchor": labelRight ? "start" : "end", "font-size": 15 }, g);
+    return [led, t];
+  });
+  let cur = active;
+  const draw = () => items.forEach(([led, t], i) => {
+    const on = i === cur;
+    led.setAttribute("fill", on ? "var(--trig)" : "var(--trig-dim)");
+    led.setAttribute("filter", on ? "url(#glow)" : "");
+    t.setAttribute("fill", on ? "var(--label)" : "var(--label-dim)");
+  });
+  draw();
+  g.addEventListener("click", () => { cur = (cur + 1) % options.length; draw(); });
+}
+switchSel(762, 672, ["Sqr", "Saw", "Tri"], 1, false);
+switchSel(843, 672, ["BP", "LP"], 1, true);
+text(762, 740, "Wave", { "font-size": 16 });
+text(843, 740, "Filter", { "font-size": 16 });
+
+// status LEDs
+const led = (x, y, c, on = true) => el("circle", { cx: x, cy: y, r: 6, fill: c, filter: on ? "url(#glow)" : "", opacity: on ? 1 : 0.25 });
+led(683, 595, "var(--trig)");
+led(1073, 593, "#ffc93b");
+led(1157, 805, "var(--trig)");
+
+// OLED
+el("rect", { x: 698, y: 758, width: 214, height: 112, rx: 4, fill: "#050505" });
+el("rect", { x: 708, y: 766, width: 194, height: 72, rx: 2, fill: "#000" });
+const px = { "font-family": "Silkscreen, monospace", fill: "var(--oled)" };
+el("rect", { x: 714, y: 772, width: 34, height: 15, fill: "var(--oled)" });
+text(731, 783, "1-03", { ...px, "font-size": 10, fill: "#000" });
+text(822, 783, "B-1  L16", { ...px, "font-size": 11 });
+text(805, 826, "128", { ...px, "font-size": 32, filter: "url(#glow)" });
+text(866, 826, "BPM", { ...px, "font-size": 9, fill: "#9aa3b5" });
+text(805, 860, "SB-64", { "font-size": 18, "font-weight": 700, fill: "#f6f6f7" });
+
+// ── keys ──────────────────────────────────────────────────────────
+const altLabels = [];
+function key(cx, cy, legend, below, { w = 64, h = 48, fill = null, icon = null, fs = 13 } = {}) {
+  const g = el("g", { class: "key" });
+  el("rect", { x: cx - w / 2, y: cy - h / 2 + 5, width: w, height: h, rx: 11, fill: "#0b0b0c" }, g);
+  el("rect", { x: cx - w / 2, y: cy - h / 2, width: w, height: h, rx: 11, fill: fill || "url(#keyTop)", stroke: fill ? "none" : "#3d3e41", "stroke-width": 1 }, g);
+  if (icon) icon(g, cx, cy);
+  else text(cx, cy + fs * 0.36, legend, { "font-size": fs, fill: fill ? "#00000099" : "var(--key-legend)", "font-weight": 600 }, g);
+  if (below) altLabels.push(text(cx, cy + h / 2 + 24, below, { "font-size": 15, fill: "var(--accent)" }, g));
+  g.addEventListener("click", () => { if (legend === "SHIFT") toggleShift(); });
+}
+let shiftOn = false;
+function toggleShift() { shiftOn = !shiftOn; stepAlt.forEach(t => t.setAttribute("opacity", shiftOn ? 1 : 0.8)); }
+const icon = {
+  play: (g, x, y) => el("path", { d: `M${x - 8} ${y - 12} L${x + 11} ${y} L${x - 8} ${y + 12} Z`, fill: "none", stroke: "#4cdb63", "stroke-width": 3.2, "stroke-linejoin": "round" }, g),
+  stop: (g, x, y) => el("rect", { x: x - 10, y: y - 10, width: 20, height: 20, rx: 3, fill: "none", stroke: "#d9dadd", "stroke-width": 3.2 }, g),
+  rec: (g, x, y) => el("circle", { cx: x, cy: y, r: 11, fill: "none", stroke: "#ff4a3d", "stroke-width": 3.2 }, g),
+  left: (g, x, y) => el("path", { d: `M${x + 5} ${y - 9} L${x - 5} ${y} L${x + 5} ${y + 9}`, fill: "none", stroke: "var(--key-legend)", "stroke-width": 3, "stroke-linecap": "round", "stroke-linejoin": "round" }, g),
+  right: (g, x, y) => el("path", { d: `M${x - 5} ${y - 9} L${x + 5} ${y} L${x - 5} ${y + 9}`, fill: "none", stroke: "var(--key-legend)", "stroke-width": 3, "stroke-linecap": "round", "stroke-linejoin": "round" }, g),
+};
+key(92, 1035, "SHIFT", "", { fill: "var(--accent)" });
+key(188, 1035, "", "", { icon: icon.play });
+key(284, 1035, "", "", { icon: icon.stop });
+key(380, 1035, "", "", { icon: icon.rec });
+key(1233, 1035, "", "", { icon: icon.left });
+key(1328, 1035, "", "", { icon: icon.right });
+key(1424, 1035, "−1 OCT", "", { fs: 12.5 });
+key(1520, 1035, "+1 OCT", "", { fs: 12.5 });
+text(1280, 1004, "Bar", { "font-size": 14, fill: "var(--label-dim)" });
+text(140, 1004, "", {});
+
+// step keys
+const stepAlt = [];
+const fn = ["Acc", "Slide", "Mod", "Pitch Env", "Last Step", "Play Mode", "Transp", "Scale",
+  "Arpegg", "LFO", "Rnd Patt", "Clear", "Copy", "Paste", "Bank", "Pattern"];
+const demo = [2, 0, 1, 1, 0, 2, 1, 0, 3, 1, 0, 1, 2, 0, 1, 1]; // 0 off, 1 note, 2 accent, 3 playhead
+function trig(cx, cy, n, label, s0) {
+  const g = el("g", { class: "key" });
+  const w = 80, h = 70;
+  el("rect", { x: cx - w / 2, y: cy - h / 2 + 6, width: w, height: h, rx: 12, fill: "#0a0a0b" }, g);
+  el("rect", { x: cx - w / 2, y: cy - h / 2, width: w, height: h, rx: 12, fill: "url(#keyTop)", stroke: "#3d3e41", "stroke-width": 1 }, g);
+  const frame = el("rect", { x: cx - 23, y: cy - 25, width: 46, height: 46, rx: 4, fill: "none", "stroke-width": 3 }, g);
+  const num = text(cx, cy + 7, String(n), { "font-size": 27, "font-weight": 500 }, g);
+  const bar = el("rect", { x: cx - 12, y: cy + 13, width: 24, height: 4, rx: 2 }, g);
+  stepAlt.push(text(cx, cy + h / 2 + 25, label, { "font-size": 14.5, fill: "var(--accent)" }, g));
+  let s = s0;
+  const draw = () => {
+    const col = s === 0 ? "var(--key-legend)" : s === 3 ? "#ffffff" : "var(--trig)";
+    num.setAttribute("fill", col); bar.setAttribute("fill", col);
+    num.setAttribute("filter", s ? "url(#glow)" : "");
+    num.setAttribute("opacity", s === 1 ? 0.8 : 1);
+    frame.setAttribute("stroke", s >= 2 ? col : "none");
+  };
+  draw();
+  g.addEventListener("click", () => { s = (s + 1) % 3; draw(); });
+}
+for (let i = 0; i < 16; i++) trig(93 + i * 95.1, 1128, i + 1, fn[i], demo[i]);
+[[0, 3], [4, 7], [8, 11], [12, 15]].forEach(([a, b]) =>
+  el("line", { x1: 93 + a * 95.1 - 12, y1: 1079, x2: 93 + b * 95.1 + 12, y2: 1079, stroke: "#6d6e72", "stroke-width": 2, "stroke-dasharray": "2 6", "stroke-linecap": "round" }));
+
+text(1555, 1252, "Synth Bass", { "text-anchor": "end", "font-size": 16, fill: "var(--label-dim)" });
+
+// ── screenshot mode: mockup.html#shot (+ "-soon" for the sticker) ──
+root = svg;
+if (location.hash.startsWith("#shot")) {
+  document.querySelector(".bar").remove();
+  document.querySelector(".wrap").style.cssText = "max-width:none;padding:0";
+  document.body.style.background = "transparent";
+  if (location.hash.includes("soon")) {
+    const s = el("g", { transform: "translate(1180 250) rotate(-12)" });
+    el("rect", { x: -300, y: -86, width: 600, height: 172, rx: 26, fill: "#000", opacity: 0.45, transform: "translate(6 12)", filter: "url(#shadow)" }, s);
+    el("rect", { x: -300, y: -86, width: 600, height: 172, rx: 26, fill: "var(--accent)" }, s);
+    el("rect", { x: -286, y: -72, width: 572, height: 144, rx: 18, fill: "none", stroke: "#1b1b1c", "stroke-width": 4, "stroke-dasharray": "14 10" }, s);
+    text(0, 4, "COMING SOON", { "font-size": 64, "font-weight": 700, fill: "#1b1b1c", textLength: 500, lengthAdjust: "spacingAndGlyphs" }, s);
+    text(0, 50, "in development", { "font-size": 25, "font-weight": 600, fill: "#1b1b1c" }, s);
+  }
+}
+
+// ── accent colour chips ───────────────────────────────────────────
+const accents = ["#b5e853", "#ff7a45", "#ffb21e", "#45d6e6", "#ff5fa2", "#b18cff"];
+const chips = document.getElementById("chips");
+if (chips) accents.forEach((c, i) => {
+  const b = document.createElement("button");
+  b.className = "chip"; b.style.background = c; b.title = c;
+  b.setAttribute("aria-pressed", i === 0);
+  b.onclick = () => {
+    document.documentElement.style.setProperty("--accent", c);
+    chips.querySelectorAll(".chip").forEach(x => x.setAttribute("aria-pressed", x === b));
+  };
+  chips.appendChild(b);
+});
+</script>
+</body>
+</html>
