@@ -82,6 +82,7 @@ core.*
 *.flac
 *.mp3
 /reference/
+/SAMPLES/
 *.pdf
 
 # ── Agent notes (stay local, kept in the owner's cloud) ─────
