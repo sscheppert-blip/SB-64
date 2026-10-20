@@ -1,11 +1,15 @@
 #include "Menu.h"
 
 #include "Parameters.h"
+#include "dsp/Arp.h"
+#include "dsp/Scales.h"
+#include "dsp/Sequencer.h"
 #include "dsp/Voice.h"
 
 namespace sb64::menu
 {
     namespace id = params::id;
+    namespace seq = sb64::seq;
 
     const std::vector<Item>& items()
     {
@@ -13,6 +17,22 @@ namespace sb64::menu
             { id::tempo,         "BPM" },
             { id::clock,         "CLK" },
             { id::swing,         "SWG" },
+            { id::playMode,      "PLY" },
+            { id::transpose,     "TRP" },
+            { id::scale,         "SCL" },
+            { id::root,          "KEY" },
+            { id::masterSlide,   "MSL" },
+            { id::arp,           "ARP" },
+            { id::arpDir,        "ADR" },
+            { id::arpOct,        "AOC" },
+            { id::arpGate,       "AGT" },
+            { id::arpRhythm,     "ARH" },
+            { id::arpSource,     "ASR" },
+            { id::rndDensity,    "DNS" },
+            { id::rndAccent,     "RAC" },
+            { id::rndSlide,      "RSL" },
+            { id::rndOctaves,    "ROC" },
+            { id::rndMod,        "RMD" },
             { id::lfoShape,      "LFO" },
             { id::lfoSync,       "SYN" },
             { id::lfoRange,      "RNG" },
@@ -73,6 +93,37 @@ namespace sb64::menu
         if (paramId == id::clock)
             return whole != 0 ? "HST" : "INT";
 
+        if (paramId == id::playMode)
+            return seq::playModeNames[juce::jlimit (0, seq::numPlayModes - 1, whole)];
+
+        if (paramId == id::scale)
+        {
+            const auto scale = juce::jlimit (0, seq::numScales - 1, whole);
+            return seq::isUserScale (scale) ? "U" + juce::String (scale - seq::numFactoryScales + 1) : juce::String (seq::scaleNames[scale]);
+        }
+
+        if (paramId == id::root)
+            return noteName (whole + 12).dropLastCharacters (1);
+
+        if (paramId == id::arp)
+            return whole != 0 ? "ON" : "OFF";
+
+        if (paramId == id::arpDir)
+            return seq::arpDirectionNames[juce::jlimit (0, 3, whole)];
+
+        if (paramId == id::arpSource)
+            return whole != 0 ? "SCL" : "KEY";
+
+        if (paramId == id::transpose)
+            return whole > 0 ? "+" + juce::String (whole) : juce::String (whole);
+
+        if (paramId == id::masterSlide)
+            return whole > 0 ? juce::String (whole) : juce::String ("OFF");
+
+        if (paramId == id::arpOct || paramId == id::arpGate || paramId == id::arpRhythm || paramId == id::rndDensity
+            || paramId == id::rndAccent || paramId == id::rndSlide || paramId == id::rndOctaves || paramId == id::rndMod)
+            return juce::String (whole);
+
         if (paramId == id::tempo || paramId == id::swing || paramId == id::slideTime || paramId == id::accentVel || paramId == id::pitchEnvDepth || paramId == id::bendRange)
             return juce::String (whole);
 
@@ -112,6 +163,10 @@ namespace sb64::menu
             next = value + (float) steps * (fine ? 1.0f : 5.0f);
         else if (paramId == id::tune)
             next = value + (float) steps * (fine ? 0.1f : 0.5f);
+        else if (paramId == id::masterSlide)
+            next = value <= 0.0f && steps > 0 ? 10.0f : (value <= 10.0f && steps < 0 ? 0.0f : value + (float) steps * (fine ? 1.0f : 5.0f));
+        else if (paramId == id::arpGate || paramId == id::rndDensity || paramId == id::rndAccent || paramId == id::rndSlide)
+            next = value + (float) steps * (fine ? 1.0f : 5.0f);
         else if (paramId == id::accentVel)
             next = value + (float) steps * (fine ? 1.0f : 4.0f);
         else if (range.interval >= 1.0f || dynamic_cast<juce::AudioParameterChoice*> (parameter) != nullptr

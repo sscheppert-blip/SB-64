@@ -1,6 +1,7 @@
 #include "PluginEditor.h"
 #include "Menu.h"
 #include "Parameters.h"
+#include "dsp/Scales.h"
 
 namespace
 {
@@ -17,8 +18,11 @@ namespace
                                     "ARPEGG", "LFO", "RND PATT", "CLEAR", "COPY", "PASTE", "BANK", "PATTERN" };
 
     // shift functions on the step keys
-    enum Function { fnAccent = 0, fnSlide = 1, fnLastStep = 4, fnLfo = 9, fnClear = 11, fnCopy = 12, fnPaste = 13,
+    enum Function { fnAccent = 0, fnSlide = 1, fnMod = 2, fnPitchEnv = 3, fnLastStep = 4, fnPlayMode = 5, fnTranspose = 6,
+                    fnScale = 7, fnArp = 8, fnLfo = 9, fnRandom = 10, fnClear = 11, fnCopy = 12, fnPaste = 13,
                     fnBank = 14, fnPattern = 15 };
+
+    juce::String signedText (int v) { return v > 0 ? "+" + juce::String (v) : juce::String (v); }
 
     struct KnobLabel
     {
@@ -90,7 +94,7 @@ FrontPanel::FrontPanel (SB64AudioProcessor& p) : processor (p)
     auto& select = make<ui::Encoder> (52.0f);
     select.place ({ 685, 605 });
     select.onStep = [this] (int steps, bool fine) { turnSelect (steps, fine); };
-    select.onClick = [this] { turnSelect (0, false); };
+    select.onClick = [this] { clickSelect(); };
 
     auto& note = make<ui::Encoder> (52.0f);
     note.place ({ 890, 605 });
@@ -122,7 +126,17 @@ FrontPanel::FrontPanel (SB64AudioProcessor& p) : processor (p)
 
     recButton = &make<ui::RoundButton> (ui::RoundButton::Cap::grey);
     recButton->place ({ 357, buttonY });
-    recButton->onPress = [this] { setRecording (! processor.isRecording()); };
+    recButton->onPress = [this]
+    {
+        if (shift)
+        {
+            setShift (false);
+            setKeyboardMode (! keyboard);
+            return;
+        }
+
+        setRecording (! processor.isRecording());
+    };
 
     auto& barDown = make<ui::RoundButton> (ui::RoundButton::Cap::grey);
     barDown.place ({ 1213, buttonY });
@@ -237,14 +251,72 @@ void FrontPanel::changeMenuValue (int steps, bool fine)
 //==============================================================================
 // Encoders
 
+juce::String FrontPanel::stepFieldText (const seq::Step& step) const
+{
+    switch (stepField)
+    {
+        case StepField::chance:
+            if (step.chance <= 0)
+                return "ALL";
+            if (step.chance < seq::firstRatio)
+                return juce::String (seq::chancePercent[step.chance]);
+            return juce::String (step.chance - seq::firstRatio + 1) + "/8";
+
+        case StepField::cent:
+            return signedText (step.cent);
+
+        case StepField::gate:
+            break;
+    }
+
+    return juce::String (step.gate);
+}
+
+void FrontPanel::clickSelect()
+{
+    // with a step selected: switches between its gate, chance and fine tune
+    if (selectedStep >= 0 && ! processor.isRecording() && keyMode == KeyMode::steps)
+    {
+        stepField = stepField == StepField::gate ? StepField::chance
+                  : stepField == StepField::chance ? StepField::cent : StepField::gate;
+        showText (stepField == StepField::gate ? "GAT" : stepField == StepField::chance ? "PRB" : "CNT", 0.8);
+        return;
+    }
+
+    selectMenu (0);
+}
+
 void FrontPanel::turnSelect (int steps, bool fine)
 {
     if (selectedStep >= 0 && ! processor.isRecording())
     {
         auto step = pattern().get (selectedStep);
-        step.gate = juce::jlimit (seq::minGate, seq::maxGate, step.gate + steps * (fine ? 1 : 5));
+
+        if (keyMode == KeyMode::mod)
+        {
+            step.mod = juce::jlimit (seq::minMod, seq::maxMod, step.mod + steps * (fine ? 1 : 8));
+            pattern().set (selectedStep, step);
+            showText (signedText (step.mod));
+            return;
+        }
+
+        if (keyMode == KeyMode::pitchEnv)
+        {
+            step.pitchDecay = juce::jlimit (0, seq::maxPitchEnv, step.pitchDecay + steps);
+            pattern().set (selectedStep, step);
+            showText ("DC" + juce::String (step.pitchDecay));
+            return;
+        }
+
+        switch (stepField)
+        {
+            case StepField::gate:   step.gate = juce::jlimit (seq::minGate, seq::maxGate, step.gate + steps * (fine ? 1 : 5)); break;
+            case StepField::chance: step.chance = juce::jlimit (0, seq::numChances - 1, step.chance + steps); break;
+            case StepField::cent:   step.cent = juce::jlimit (-seq::maxCent, seq::maxCent, step.cent + steps * (fine ? 1 : 5)); break;
+        }
+
         pattern().set (selectedStep, step);
-        showText (juce::String (step.gate));
+        showText (stepFieldText (step));
         return;
     }
 
@@ -253,6 +325,34 @@ void FrontPanel::turnSelect (int steps, bool fine)
 
 void FrontPanel::turnNote (int steps, bool fine)
 {
+    if (keyMode == KeyMode::scale && scaleDegree >= 0 && editedScale() >= 0)
+    {
+        // detunes the picked note of the user scale
+        auto& users = processor.getUserScales();
+        const auto user = editedScale();
+        users.setCents (user, scaleDegree, users.cents (user, scaleDegree) + steps * (fine ? 1 : 5));
+        showText (signedText (users.cents (user, scaleDegree)));
+        return;
+    }
+
+    if (selectedStep >= 0 && ! processor.isRecording() && keyMode == KeyMode::mod)
+    {
+        auto step = pattern().get (selectedStep);
+        step.mod = juce::jlimit (seq::minMod, seq::maxMod, step.mod + steps);
+        pattern().set (selectedStep, step);
+        showText (signedText (step.mod));
+        return;
+    }
+
+    if (selectedStep >= 0 && ! processor.isRecording() && keyMode == KeyMode::pitchEnv)
+    {
+        auto step = pattern().get (selectedStep);
+        step.pitchDepth = juce::jlimit (0, seq::maxPitchEnv, step.pitchDepth + steps);
+        pattern().set (selectedStep, step);
+        showText (step.pitchDepth > 0 ? "PE" + juce::String (step.pitchDepth) : juce::String ("OFF"));
+        return;
+    }
+
     if (selectedStep >= 0 && ! processor.isRecording())
     {
         // turning the note also switches the step on
@@ -275,9 +375,14 @@ void FrontPanel::back()
     else if (juce::Time::getMillisecondCounterHiRes() < menuUntil)
         menuUntil = 0.0;
     else if (selectedStep >= 0)
+    {
         selectedStep = -1;
-    else
+        stepField = StepField::gate;
+    }
+    else if (keyMode != KeyMode::steps)
         keyMode = KeyMode::steps;
+    else if (keyboard)
+        setKeyboardMode (false);
 
     transientUntil = 0.0;
 }
@@ -316,6 +421,23 @@ void FrontPanel::setRecording (bool on)
 
     pending = Pending::none;
     showText (on ? "REC" : "---", 0.8);
+}
+
+void FrontPanel::setKeyboardMode (bool on)
+{
+    keyboard = on;
+    selectedStep = -1;
+    pending = Pending::none;
+
+    for (int i = 0; i < numKeys; ++i)
+        releaseKey (i);
+
+    showText (on ? "KBD" : "STP", 0.8);
+}
+
+int FrontPanel::editedScale() const
+{
+    return juce::roundToInt (processor.getState().getRawParameterValue (id::scale)->load()) - seq::numFactoryScales;
 }
 
 void FrontPanel::showBar (int newBar)
@@ -359,7 +481,7 @@ void FrontPanel::pressKey (int key, bool shiftModifier)
         return;
     }
 
-    if (processor.isRecording())
+    if (processor.isRecording() || keyboard)
     {
         // a keyboard; the computer's Shift key plays an accent
         releaseKey (key);
@@ -389,6 +511,35 @@ void FrontPanel::pressKey (int key, bool shiftModifier)
         case KeyMode::slide:
             step.slide = ! step.slide;
             pattern().set (index, step);
+            break;
+
+        case KeyMode::mod:
+            // selects the step; the encoders set its value
+            selectedStep = index;
+            showText (signedText (step.mod), 0.8);
+            break;
+
+        case KeyMode::scale:
+        {
+            // keys 1..12: the notes above the root; a key adds or removes its note and picks it for NOTE
+            if (key >= 12 || editedScale() < 0)
+                break;
+
+            auto& users = processor.getUserScales();
+            const auto user = editedScale();
+
+            if (key == scaleDegree || ((users.mask (user) >> key) & 1u) == 0)
+                users.setMask (user, users.mask (user) ^ (1u << key));
+
+            scaleDegree = key;
+            const auto inScale = ((users.mask (user) >> key) & 1u) != 0;
+            showText (inScale ? signedText (users.cents (user, key)) : juce::String ("OFF"), 0.8);
+            break;
+        }
+
+        case KeyMode::pitchEnv:
+            selectedStep = index;
+            showText (step.pitchDepth > 0 ? "PE" + juce::String (step.pitchDepth) : juce::String ("OFF"), 0.8);
             break;
 
         case KeyMode::steps:
@@ -424,12 +575,48 @@ void FrontPanel::function (int key)
     {
         case fnAccent:
         case fnSlide:
+        case fnMod:
+        case fnPitchEnv:
         {
-            const auto mode = key == fnAccent ? KeyMode::accent : KeyMode::slide;
+            const auto mode = key == fnAccent ? KeyMode::accent : key == fnSlide ? KeyMode::slide
+                            : key == fnMod ? KeyMode::mod : KeyMode::pitchEnv;
             keyMode = keyMode == mode ? KeyMode::steps : mode;
-            showText (keyMode == KeyMode::accent ? "ACC" : (keyMode == KeyMode::slide ? "SLD" : "STP"), 0.8);
+            selectedStep = -1;
+            showText (keyMode == KeyMode::accent ? "ACC" : keyMode == KeyMode::slide ? "SLD"
+                      : keyMode == KeyMode::mod ? "MOD" : keyMode == KeyMode::pitchEnv ? "PEN" : "STP", 0.8);
             break;
         }
+
+        case fnPlayMode:  openMenuAt (id::playMode); break;
+        case fnTranspose: openMenuAt (id::transpose); break;
+        case fnScale:
+            // a user scale: the keys edit it; a factory scale: the menu picks one
+            if (editedScale() >= 0)
+            {
+                keyMode = keyMode == KeyMode::scale ? KeyMode::steps : KeyMode::scale;
+                scaleDegree = -1;
+                selectedStep = -1;
+                showText (keyMode == KeyMode::scale ? "U" + juce::String (editedScale() + 1) : juce::String ("STP"), 0.8);
+            }
+            else
+            {
+                openMenuAt (id::scale);
+            }
+            break;
+
+        case fnArp:
+        {
+            const auto on = processor.getState().getRawParameterValue (id::arp)->load() < 0.5f;
+            setParameter (processor.getState(), id::arp, on ? 1.0f : 0.0f);
+            showText (on ? "ARP" : "OFF", 0.8);
+            break;
+        }
+
+        case fnRandom:
+            processor.randomisePattern();
+            selectedStep = -1;
+            showText ("RND", 0.8);
+            break;
 
         case fnLastStep: pending = Pending::lastStep; showText ("LST", 0.8); break;
         case fnClear:    pending = Pending::clear;    showText ("CLR", 0.8); break;
@@ -452,7 +639,6 @@ void FrontPanel::function (int key)
             break;
 
         default:
-            showText ("---", 0.8);   // comes in phase 3
             break;
     }
 
@@ -494,6 +680,20 @@ void FrontPanel::choose (int key)
             selectedStep = -1;
             bar = 0;
             showText (Patterns::name (index));
+
+            // further keys right after it chain patterns
+            pending = Pending::chain;
+            chainUntil = juce::Time::getMillisecondCounterHiRes() + 2500.0;
+            break;
+        }
+
+        case Pending::chain:
+        {
+            const auto index = patterns.selectedIndex() / Patterns::patternsPerBank * Patterns::patternsPerBank + key;
+            patterns.addToChain (index);
+            showText ("C" + juce::String (patterns.chainLength()), 0.8);
+            pending = Pending::chain;
+            chainUntil = juce::Time::getMillisecondCounterHiRes() + 2500.0;
             break;
         }
 
@@ -539,6 +739,9 @@ void FrontPanel::timerCallback()
     playButton->setLit (running || (armed && blink));
     recButton->setLit (processor.isRecording());
 
+    if (pending == Pending::chain && now > chainUntil)
+        pending = Pending::none;
+
     if (! running)
         followPlayhead = true;
     else if (followPlayhead && d.step.load() >= 0)
@@ -563,7 +766,7 @@ void FrontPanel::updateDisplay (double now)
     else if (pending != Pending::none)
     {
         display->setText (pending == Pending::lastStep ? "LST" : pending == Pending::clear ? "CLR"
-                          : pending == Pending::bank ? "BNK" : "PAT");
+                          : pending == Pending::bank ? "BNK" : pending == Pending::chain ? "CHN" : "PAT");
     }
     else if (processor.isRecording() && ! processor.getDisplay().running.load())
     {
@@ -572,7 +775,13 @@ void FrontPanel::updateDisplay (double now)
     else if (selectedStep >= 0)
     {
         const auto step = pattern().get (selectedStep);
-        display->setText (step.on ? sb64::menu::noteName (step.note) : juce::String ("OFF"));
+
+        if (keyMode == KeyMode::mod)
+            display->setText (signedText (step.mod));
+        else if (keyMode == KeyMode::pitchEnv)
+            display->setText (step.pitchDepth > 0 ? "PE" + juce::String (step.pitchDepth) : juce::String ("OFF"));
+        else
+            display->setText (step.on ? sb64::menu::noteName (step.note) : juce::String ("OFF"));
     }
     else
     {
@@ -605,6 +814,16 @@ void FrontPanel::updateKeys (double now)
                 state = k >= Patterns::numBanks ? 0 : (k == patterns.selectedIndex() / Patterns::patternsPerBank ? 2 : 1);
                 break;
 
+            case Pending::chain:
+            {
+                const auto candidate = patterns.selectedIndex() / Patterns::patternsPerBank * Patterns::patternsPerBank + k;
+                auto inChain = candidate == patterns.selectedIndex();
+                for (int c = 0; c < patterns.chainLength(); ++c)
+                    inChain = inChain || patterns.chainEntry (c) == candidate;
+                state = inChain ? 2 : (patterns.pattern (candidate).isEmpty() ? 0 : 1);
+                break;
+            }
+
             case Pending::pattern:
             {
                 const auto candidate = patterns.selectedIndex() / Patterns::patternsPerBank * Patterns::patternsPerBank + k;
@@ -618,7 +837,14 @@ void FrontPanel::updateKeys (double now)
                 break;
 
             case Pending::none:
-                if (processor.isRecording())
+                if (keyMode == KeyMode::scale && ! processor.isRecording() && ! keyboard)
+                {
+                    // the user scale's notes; the picked one blinks
+                    const auto user = editedScale();
+                    const auto inScale = user >= 0 && k < 12 && ((processor.getUserScales().mask (user) >> k) & 1u) != 0;
+                    state = k == scaleDegree ? (blink ? 2 : 0) : (inScale ? 2 : 0);
+                }
+                else if (processor.isRecording() || keyboard)
                 {
                     // a keyboard: playing notes light up, the white keys glow dimly
                     const auto note = baseNote + k;
@@ -630,6 +856,11 @@ void FrontPanel::updateKeys (double now)
 
                     if (index == selectedStep)
                         state = blink ? 2 : 0;
+                }
+                else if (keyMode == KeyMode::mod || keyMode == KeyMode::pitchEnv)
+                {
+                    const auto set = keyMode == KeyMode::mod ? step.mod != 0 : step.pitchDepth > 0;
+                    state = index == selectedStep ? (blink ? 2 : 0) : (set ? 2 : (index == playing ? 1 : 0));
                 }
                 else
                 {

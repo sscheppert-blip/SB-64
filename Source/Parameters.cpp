@@ -24,6 +24,15 @@ namespace sb64::params
                                    : juce::String (value / 1000.0f, 2) + " kHz";
         }
 
+        juce::StringArray scaleChoices()
+        {
+            juce::StringArray names { "Chromatic", "Major", "Minor", "Major Pentatonic", "Minor Pentatonic", "Whole Tone",
+                                      "Major Blues", "Minor Blues" };
+            for (int u = 1; u <= 16; ++u)
+                names.add ("User " + juce::String (u));
+            return names;
+        }
+
         juce::String seconds (float value)
         {
             return value < 1.0f ? juce::String (juce::roundToInt (value * 1000.0f)) + " ms" : juce::String (value, 2) + " s";
@@ -99,6 +108,35 @@ namespace sb64::params
                                                                   juce::StringArray { "Internal", "Host" }, standalone ? 0 : 1));
         layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::swing, 1 }, "Swing", 0, 50, 0,
                                                                juce::AudioParameterIntAttributes().withLabel ("%")));
+        layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { id::playMode, 1 }, "Play Mode",
+                                                                  juce::StringArray { "Forward", "Backward", "Random", "Ping-Pong", "Ping-Pong 2" }, 0));
+        layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::transpose, 1 }, "Transpose", -24, 24, 0,
+                                                               juce::AudioParameterIntAttributes().withLabel ("st")));
+        layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { id::scale, 1 }, "Scale", scaleChoices(), 0));
+        layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { id::root, 1 }, "Scale Root",
+                                                                  juce::StringArray { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }, 0));
+
+        layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::masterSlide, 1 }, "Master Slide", 0, 100, 0,
+                                                               juce::AudioParameterIntAttributes().withLabel ("%")));
+
+        layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { id::arp, 1 }, "Arpeggiator", false));
+        layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { id::arpDir, 1 }, "Arp Direction",
+                                                                  juce::StringArray { "Up", "Down", "Up & Down", "Random" }, 0));
+        layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::arpOct, 1 }, "Arp Octaves", 1, 3, 1));
+        layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::arpGate, 1 }, "Arp Gate", 10, 100, 50,
+                                                               juce::AudioParameterIntAttributes().withLabel ("%")));
+        layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::arpRhythm, 1 }, "Arp Rhythm", 1, 6, 1));
+        layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { id::arpSource, 1 }, "Arp Source",
+                                                                  juce::StringArray { "Keys", "Scale" }, 0));
+
+        layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::rndDensity, 1 }, "Random Density", 10, 90, 70,
+                                                               juce::AudioParameterIntAttributes().withLabel ("%")));
+        layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::rndAccent, 1 }, "Random Accents", 0, 100, 25,
+                                                               juce::AudioParameterIntAttributes().withLabel ("%")));
+        layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::rndSlide, 1 }, "Random Slides", 0, 100, 20,
+                                                               juce::AudioParameterIntAttributes().withLabel ("%")));
+        layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::rndOctaves, 1 }, "Random Octaves", 1, 3, 1));
+        layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::rndMod, 1 }, "Random Mod", 0, 64, 0));
 
         return layout;
     }

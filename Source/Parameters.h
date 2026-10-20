@@ -43,6 +43,26 @@ namespace sb64::params
         inline constexpr const char* tempo = "tempo";
         inline constexpr const char* clock = "clock";
         inline constexpr const char* swing = "swing";
+        inline constexpr const char* playMode  = "playMode";
+        inline constexpr const char* transpose = "transpose";
+        inline constexpr const char* scale     = "scale";
+        inline constexpr const char* root      = "root";
+        inline constexpr const char* masterSlide = "masterSlide";
+
+        // arpeggiator
+        inline constexpr const char* arp       = "arp";
+        inline constexpr const char* arpDir    = "arpDirection";
+        inline constexpr const char* arpOct    = "arpOctaves";
+        inline constexpr const char* arpGate   = "arpGate";
+        inline constexpr const char* arpRhythm = "arpRhythm";
+        inline constexpr const char* arpSource = "arpSource";
+
+        // random pattern generator
+        inline constexpr const char* rndDensity = "rndDensity";
+        inline constexpr const char* rndAccent  = "rndAccent";
+        inline constexpr const char* rndSlide   = "rndSlide";
+        inline constexpr const char* rndOctaves = "rndOctaves";
+        inline constexpr const char* rndMod     = "rndMod";
     }
 
     // clock choices

@@ -1,6 +1,8 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "Parameters.h"
+#include "dsp/Generator.h"
+#include "dsp/Scales.h"
 
 namespace
 {
@@ -41,6 +43,15 @@ SB64AudioProcessor::SB64AudioProcessor()
     refs.volume = raw (id::volume);
     refs.run = raw (id::run);               refs.tempo = raw (id::tempo);
     refs.clock = raw (id::clock);           refs.swing = raw (id::swing);
+    refs.playMode = raw (id::playMode);     refs.transpose = raw (id::transpose);
+    refs.scale = raw (id::scale);           refs.root = raw (id::root);
+    refs.masterSlide = raw (id::masterSlide);
+    refs.arp = raw (id::arp);               refs.arpDir = raw (id::arpDir);
+    refs.arpOct = raw (id::arpOct);         refs.arpGate = raw (id::arpGate);
+    refs.arpRhythm = raw (id::arpRhythm);   refs.arpSource = raw (id::arpSource);
+    refs.rndDensity = raw (id::rndDensity); refs.rndAccent = raw (id::rndAccent);
+    refs.rndSlide = raw (id::rndSlide);     refs.rndOctaves = raw (id::rndOctaves);
+    refs.rndMod = raw (id::rndMod);
 
     heldNotes.reserve (128);
 }
@@ -64,6 +75,7 @@ void SB64AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     voice.setSettings (readSettings ((double) display.bpm.load()));
     voice.prepare (sampleRate * oversamplingFactor);
     sequencer.prepare (sampleRate);
+    arp.prepare (sampleRate);
     wasRunning = false;
     heldNotes.clear();
     hostWasPlaying = false;
@@ -110,11 +122,16 @@ sb64::dsp::Settings SB64AudioProcessor::readSettings (double bpm) const noexcept
 void SB64AudioProcessor::playNote (int note, int velocity, bool slide) noexcept
 {
     const auto accent = velocity >= juce::roundToInt (refs.accentVel->load());
-    voice.noteOn ((float) note, accent, slide ? sb64::dsp::Transition::slide : sb64::dsp::Transition::retrigger);
+    voice.setStepPitchEnvelope (-1, 0.0f);
+
+    // master slide: legato notes glide over this share of a 16th (off: the slide time setting)
+    const auto master = refs.masterSlide->load();
+    const auto glide = master > 0.0f ? (float) (master * 0.01 * 15.0 / currentBpm) : -1.0f;
+    voice.noteOn ((float) note, accent, slide ? sb64::dsp::Transition::slide : sb64::dsp::Transition::retrigger, glide);
     display.note = note;
 }
 
-void SB64AudioProcessor::record (int note, int velocity) noexcept
+void SB64AudioProcessor::record (int note, int velocity, int gate) noexcept
 {
     auto& pattern = patterns.selected();
     int target;
@@ -137,6 +154,10 @@ void SB64AudioProcessor::record (int note, int velocity) noexcept
     step.note = juce::jlimit (sb64::seq::lowestNote, sb64::seq::highestNote, note);
     step.accent = velocity >= juce::roundToInt (refs.accentVel->load());
     step.slide = false;
+
+    if (gate > 0)
+        step.gate = juce::jlimit (sb64::seq::minGate, sb64::seq::maxGate, gate);
+
     pattern.set (target, step);
 }
 
@@ -146,20 +167,28 @@ void SB64AudioProcessor::handleMidi (const juce::MidiMessage& message) noexcept
     {
         const auto note = message.getNoteNumber();
 
-        if (recording.load())
+        // with the arpeggiator on, its notes are recorded instead
+        if (recording.load() && refs.arp->load() < 0.5f)
             record (note, message.getVelocity());
 
         const auto legato = ! heldNotes.empty();
         heldNotes.erase (std::remove (heldNotes.begin(), heldNotes.end(), note), heldNotes.end());
         heldNotes.push_back (note);
-        // playing legato slides to the new note
-        playNote (note, message.getVelocity(), legato);
+        arp.setHeld (heldNotes);
+
+        // playing legato slides to the new note (with the arpeggiator on, it plays the held notes)
+        if (refs.arp->load() < 0.5f)
+            playNote (note, message.getVelocity(), legato);
     }
     else if (message.isNoteOff())
     {
         const auto note = message.getNoteNumber();
         const auto wasSounding = ! heldNotes.empty() && heldNotes.back() == note;
         heldNotes.erase (std::remove (heldNotes.begin(), heldNotes.end(), note), heldNotes.end());
+        arp.setHeld (heldNotes);
+
+        if (refs.arp->load() > 0.5f)
+            return;
 
         if (heldNotes.empty())
             voice.noteOff();
@@ -173,6 +202,7 @@ void SB64AudioProcessor::handleMidi (const juce::MidiMessage& message) noexcept
     else if (message.isAllNotesOff() || message.isAllSoundOff())
     {
         heldNotes.clear();
+        arp.setHeld (heldNotes);
 
         if (message.isAllSoundOff())
             voice.panic();
@@ -219,6 +249,7 @@ void SB64AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     if (hostWasPlaying && ! hostPlaying)
     {
         heldNotes.clear();
+        arp.setHeld (heldNotes);
         voice.noteOff();
     }
 
@@ -240,6 +271,32 @@ void SB64AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     if (! clock.host)
         display.bpm = (float) clock.bpm;
 
+    auto index = [] (const std::atomic<float>* p, int max) { return juce::jlimit (0, max, juce::roundToInt (p->load())); };
+
+    sb64::seq::PlayOptions options;
+    options.mode = (sb64::seq::PlayMode) index (refs.playMode, sb64::seq::numPlayModes - 1);
+    options.transpose = juce::roundToInt (refs.transpose->load());
+    options.scale = index (refs.scale, sb64::seq::numScales - 1);
+    options.root = index (refs.root, 11);
+    options.users = &userScales;
+    currentBpm = clock.bpm;
+    sequencer.setOptions (options);
+
+    const auto arpOn = refs.arp->load() > 0.5f;
+    sb64::seq::ArpSettings arpSettings;
+    arpSettings.direction = (sb64::seq::ArpDirection) index (refs.arpDir, 3);
+    arpSettings.octaves = juce::roundToInt (refs.arpOct->load());
+    arpSettings.gate = juce::roundToInt (refs.arpGate->load());
+    arpSettings.rhythm = juce::roundToInt (refs.arpRhythm->load()) - 1;
+    arpSettings.scaleSource = refs.arpSource->load() > 0.5f;
+    arpSettings.scale = options.scale;
+    arpSettings.users = &userScales;
+    const auto recordArp = recording.load();
+
+    // the arpeggiator switched off lets go of its note
+    if (! arpOn && arp.isPlaying())
+        arp.stop (voice);
+
     // one host sample at a time: MIDI, sequencer, voice
     auto* oversampled = oversampledBuffer.getWritePointer (0);
     auto event = midi.cbegin();
@@ -251,6 +308,11 @@ void SB64AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
 
         clock.ppq = ppqStart + ppqPerSample * i;
         sequencer.process (voice, patterns, clock);
+
+        if (arpOn)
+            if (const auto played = arp.process (voice, arpSettings, clock.bpm, options.transpose); played >= 0 && recordArp)
+                record (played, 0, arpSettings.gate);
+
         voice.render (oversampled + i * oversamplingFactor, oversamplingFactor);
     }
 
@@ -297,12 +359,48 @@ void SB64AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
         buffer.clear (c, 0, numSamples);
 }
 
+void SB64AudioProcessor::randomisePattern()
+{
+    auto whole = [] (const std::atomic<float>* p) { return juce::roundToInt (p->load()); };
+
+    sb64::seq::RandomSettings settings;
+    settings.density = whole (refs.rndDensity);
+    settings.accent = whole (refs.rndAccent);
+    settings.slide = whole (refs.rndSlide);
+    settings.octaves = whole (refs.rndOctaves);
+    settings.mod = whole (refs.rndMod);
+    settings.scale = whole (refs.scale);
+    settings.root = whole (refs.root);
+    settings.users = &userScales;
+
+    sb64::seq::randomise (patterns.selected(), settings, (uint32_t) juce::Random::getSystemRandom().nextInt());
+}
+
 //==============================================================================
 void SB64AudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     auto tree = state.copyState();
     tree.setProperty (editorWidthProperty, editorWidth.load(), nullptr);
     tree.appendChild (patterns.toTree(), nullptr);
+
+    // user scales that differ from chromatic: mask and twelve detunes
+    juce::ValueTree scales ("SCALES");
+    for (int u = 0; u < sb64::seq::numUserScales; ++u)
+    {
+        if (userScales.isDefault (u))
+            continue;
+
+        juce::StringArray cents;
+        for (int d = 0; d < 12; ++d)
+            cents.add (juce::String (userScales.cents (u, d)));
+
+        juce::ValueTree scale ("SCALE");
+        scale.setProperty ("index", u, nullptr);
+        scale.setProperty ("mask", (int) userScales.mask (u), nullptr);
+        scale.setProperty ("cents", cents.joinIntoString (" "), nullptr);
+        scales.appendChild (scale, nullptr);
+    }
+    tree.appendChild (scales, nullptr);
 
     if (const auto xml = tree.createXml())
         copyXmlToBinary (*xml, destData);
@@ -321,6 +419,22 @@ void SB64AudioProcessor::setStateInformation (const void* data, int sizeInBytes)
             const auto savedPatterns = tree.getChildWithName ("PATTERNS");
             tree.removeChild (savedPatterns, nullptr);
             patterns.fromTree (savedPatterns);
+
+            const auto savedScales = tree.getChildWithName ("SCALES");
+            tree.removeChild (savedScales, nullptr);
+            userScales.reset();
+
+            for (const auto& scale : savedScales)
+            {
+                const auto u = (int) scale.getProperty ("index", -1);
+                if (u < 0 || u >= sb64::seq::numUserScales)
+                    continue;
+
+                userScales.setMask (u, (unsigned) (int) scale.getProperty ("mask", 0xfff));
+                const auto cents = juce::StringArray::fromTokens (scale.getProperty ("cents").toString(), " ", "");
+                for (int d = 0; d < juce::jmin (12, cents.size()); ++d)
+                    userScales.setCents (u, d, cents[d].getIntValue());
+            }
             state.replaceState (tree);
 
             // CLAP hosts expect a value rescan after a state load (the wrapper doesn't send one itself)

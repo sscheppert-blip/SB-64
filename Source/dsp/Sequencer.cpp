@@ -1,15 +1,65 @@
 #include "Sequencer.h"
+#include "Scales.h"
 
 #include <algorithm>
 #include <cmath>
 
 namespace sb64::seq
 {
+    int passLength (PlayMode mode, int length) noexcept
+    {
+        length = std::max (1, length);
+
+        switch (mode)
+        {
+            case PlayMode::pingPong:  return length > 1 ? 2 * length - 2 : 1;
+            case PlayMode::pingPong2: return 2 * length;
+            case PlayMode::forward:
+            case PlayMode::backward:
+            case PlayMode::random:    break;
+        }
+
+        return length;
+    }
+
+    int stepInPass (PlayMode mode, int first, int last, int k) noexcept
+    {
+        const auto length = last - first + 1;
+
+        switch (mode)
+        {
+            case PlayMode::backward:  return last - k;
+            case PlayMode::pingPong:  return k < length ? first + k : last - (k - length + 1);
+            case PlayMode::pingPong2: return k < length ? first + k : last - (k - length);
+            case PlayMode::forward:
+            case PlayMode::random:    break;
+        }
+
+        return first + k;
+    }
+
+    bool chancePlays (int chance, int64_t pass, int random) noexcept
+    {
+        if (chance <= 0 || chance >= numChances)
+            return true;
+
+        if (chance < firstRatio)
+            return random < chancePercent[chance];
+
+        // n/8: the first n of every eight passes
+        return (pass % 8) < (chance - firstRatio + 1);
+    }
+
+    int Sequencer::random (int n) noexcept
+    {
+        randomState ^= randomState << 13; randomState ^= randomState >> 17; randomState ^= randomState << 5;
+        return n <= 0 ? 0 : (int) (randomState % (uint32_t) n);
+    }
     void Sequencer::prepare (double newSampleRate) noexcept
     {
         sampleRate = newSampleRate;
         running = holding = false;
-        position = -1;
+        reset();
         swingTick = -1;
         gateCountdown = -1.0;
     }
@@ -18,6 +68,8 @@ namespace sb64::seq
     {
         if (holding || gateCountdown >= 0.0)
             voice.noteOff();
+
+        voice.setCutoffOffset (0.0f);
 
         running = holding = slideNext = false;
         gateCountdown = -1.0;
@@ -122,27 +174,61 @@ namespace sb64::seq
     {
         auto* pattern = &source.playing();
 
-        // host clock: the step follows the grid; internal clock: simply the next one
-        auto nextStep = [&]
+        // where in the pass: host clock from the grid position, internal clock counted along
+        int k;
+        int64_t thisPass;
+
+        auto locate = [&]
         {
-            const auto first = pattern->first();
-            const auto length = (int64_t) pattern->length();
-            return hostClock ? first + (int) (((gridIndex % length) + length) % length)
-                             : (position < first || position >= pattern->last() ? first : position + 1);
+            const auto cycle = (int64_t) passLength (options.mode, pattern->length());
+
+            if (hostClock)
+            {
+                k = (int) (((gridIndex % cycle) + cycle) % cycle);
+                thisPass = (gridIndex - k) / cycle;
+            }
+            else
+            {
+                if (passStep < 0)
+                {
+                    passStep = 0;
+                    pass = 0;
+                }
+                else if (++passStep >= cycle)
+                {
+                    passStep = 0;
+                    ++pass;
+                }
+
+                k = passStep;
+                thisPass = pass;
+            }
         };
 
-        auto next = nextStep();
+        locate();
 
-        if (next == pattern->first())
+        if (k == 0)
         {
-            pattern = &source.startingOver();   // a queued pattern starts here
-            next = nextStep();
+            // a queued (or chained) pattern starts here
+            auto* next = &source.startingOver (position >= 0);
+
+            if (next != pattern)
+            {
+                pattern = next;
+
+                if (! hostClock)
+                    passStep = -1;
+
+                locate();
+            }
         }
 
-        position = next;
-        const auto step = pattern->get (next);
+        position = options.mode == PlayMode::random ? pattern->first() + random (pattern->length())
+                                                     : std::clamp (stepInPass (options.mode, pattern->first(), pattern->last(), k),
+                                                                   pattern->first(), pattern->last());
+        const auto step = pattern->get (position);
 
-        if (! step.on)
+        if (! step.on || ! chancePlays (step.chance, thisPass, random (100)))
         {
             if (holding)
                 voice.noteOff();
@@ -152,10 +238,15 @@ namespace sb64::seq
             return;
         }
 
+        const auto note = std::clamp (quantise (step.note + options.transpose, options.scale, options.root, options.users), 0, 127);
+        const auto detune = tuning (note, options.scale, options.root, options.users);
+        voice.setCutoffOffset ((float) step.mod / 64.0f * modOctaves);
+        voice.setStepPitchEnvelope (step.pitchDepth > 0 ? step.pitchDepth : -1, (float) step.pitchDecay / (float) maxPitchEnv);
+
         // a note held from the step before slides (or, at gate 100 %, joins without a new attack)
         const auto transition = holding ? (slideNext ? dsp::Transition::slide : dsp::Transition::legato)
                                         : dsp::Transition::retrigger;
-        voice.noteOn ((float) step.note, step.accent, transition, (float) (stepSamples / sampleRate));
+        voice.noteOn ((float) note + detune + (float) step.cent * 0.01f, step.accent, transition, (float) (stepSamples / sampleRate));
 
         holding = true;
         slideNext = step.slide;

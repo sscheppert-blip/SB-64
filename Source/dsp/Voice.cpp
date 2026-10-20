@@ -139,7 +139,8 @@ namespace sb64::dsp
         vcf.attackStep = (float) (1.0 / (filterAttackSeconds * sampleRate));
         vcf.decayCoef = vcf.releaseCoef = decayCoefficient (vcfDecaySeconds (settings.vcfEnv) * stretch, sampleRate);
 
-        pitchEnvCoef = decayCoefficient (pitchEnvSeconds (settings.pitchEnvDecay), sampleRate);
+        if (stepPitchDepth < 0)
+            pitchEnvCoef = decayCoefficient (pitchEnvSeconds (settings.pitchEnvDecay), sampleRate);
     }
 
     void Voice::noteOn (float newNote, bool withAccent, Transition transition, float glideSeconds) noexcept
@@ -175,7 +176,9 @@ namespace sb64::dsp
         // the envelopes restart from their current level (no click)
         vca.stage = Envelope::Stage::attack;
         vcf.stage = Envelope::Stage::attack;
-        pitchEnv = (float) std::clamp (settings.pitchEnvDepth, 0, 9) / 9.0f;
+        const auto ownEnvelope = stepPitchDepth >= 0;
+        pitchEnv = (float) std::clamp (ownEnvelope ? stepPitchDepth : settings.pitchEnvDepth, 0, 9) / 9.0f;
+        pitchEnvCoef = decayCoefficient (pitchEnvSeconds (ownEnvelope ? stepPitchDecay : settings.pitchEnvDecay), sampleRate);
 
         if (settings.lfoReset)
             lfo.setPhase (settings.lfoStartPhase);
@@ -362,7 +365,7 @@ namespace sb64::dsp
         // sources into the filter
         const auto in = oscillator (frequency) + 0.6f * noiseLevel.value * noise();
 
-        const auto cutoffOctaves = cutoffOct.value + vcf.level * (envAmount.value + accentOpen.value)
+        const auto cutoffOctaves = cutoffOct.value + cutoffOffset + vcf.level * (envAmount.value + accentOpen.value)
                                  + lfoLevel.value * lfoValue;
         const auto filtered = filter (in, std::exp2 (std::min (cutoffOctaves, 15.0f)));
 

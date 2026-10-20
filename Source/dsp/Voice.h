@@ -64,6 +64,13 @@ namespace sb64::dsp
         void noteOn (float note, bool accent, Transition, float glideSeconds = -1.0f) noexcept;
         void noteOff() noexcept;
         void setBend (float semitones) noexcept { bend = semitones; }
+
+        // the sequencer's MOD track: added to the cutoff, in octaves
+        void setCutoffOffset (float octaves) noexcept { cutoffOffset = octaves; }
+
+        // a step's own pitch envelope for the next new note (depth 1..9, decay 0..1); depth < 0 = the
+        // settings' envelope
+        void setStepPitchEnvelope (int depth, float decay) noexcept { stepPitchDepth = depth; stepPitchDecay = decay; }
         void panic() noexcept;
 
         // host sync: the LFO's phase in cycles (0..1)
@@ -104,7 +111,9 @@ namespace sb64::dsp
 
         // pitch
         float note = 48.0f, slideFrom = 48.0f, slideTo = 48.0f, slidePos = 1.0f, slideStep = 0.0f;
-        float bend = 0.0f, pitchEnv = 0.0f, pitchEnvCoef = 0.0f;
+        float bend = 0.0f, pitchEnv = 0.0f, pitchEnvCoef = 0.0f, cutoffOffset = 0.0f;
+        int stepPitchDepth = -1;
+        float stepPitchDecay = 0.4f;
         bool gate = false, accent = false;
 
         // oscillator

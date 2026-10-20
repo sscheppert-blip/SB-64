@@ -35,16 +35,20 @@ public:
     void play();
     void stop();
     void setRecording (bool on);
+    void setKeyboardMode (bool on);   // the keys play notes (SHIFT + REC)
     void showBar (int bar);
     void octave (int direction);
+    void clickSelectEncoder() { clickSelect(); }
     int getSelectedStep() const noexcept { return selectedStep; }
     juce::String getDisplayText() const { return display->getText(); }
 
 private:
     // what the step keys do without SHIFT
-    enum class KeyMode { steps, accent, slide };
-    // a function waiting for a step key
-    enum class Pending { none, lastStep, bank, pattern, clear };
+    enum class KeyMode { steps, accent, slide, mod, pitchEnv, scale };
+    // a function waiting for a step key; after a pattern, further keys chain patterns for a while
+    enum class Pending { none, lastStep, bank, pattern, chain, clear };
+    // what SELECT/GATE changes on the selected step (a click on the encoder switches)
+    enum class StepField { gate, chance, cent };
 
     void timerCallback() override;
     void updateDisplay (double now);
@@ -54,6 +58,8 @@ private:
     void changeMenuValue (int steps, bool fine);
     void function (int key);
     void choose (int key);
+    void clickSelect();
+    juce::String stepFieldText (const sb64::seq::Step&) const;
     sb64::seq::Pattern& pattern();
 
     template <typename T, typename... Args>
@@ -89,6 +95,11 @@ private:
 
     KeyMode keyMode = KeyMode::steps;
     Pending pending = Pending::none;
+    StepField stepField = StepField::gate;
+    double chainUntil = 0.0;
+    bool keyboard = false;
+    int scaleDegree = -1;   // the user scale's note being edited (KeyMode::scale)
+    int editedScale() const;
     int bar = 0, selectedStep = -1;
     bool followPlayhead = true;   // the shown bar follows the playing step until BAR is pressed
     int baseNote = 36;            // REC keyboard: the first key plays C2

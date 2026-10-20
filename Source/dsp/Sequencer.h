@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Pattern.h"
+#include "Scales.h"
 #include "Voice.h"
 
 #include <cstdint>
@@ -20,6 +21,29 @@ namespace sb64::seq
         float swing = 0.0f;        // 0 .. 0.5 of a step for the offbeats
     };
 
+    enum class PlayMode { forward, backward, random, pingPong, pingPong2 };
+    inline constexpr int numPlayModes = 5;
+    inline constexpr const char* playModeNames[numPlayModes] { "FWD", "BWD", "RND", "PP", "PP2" };
+
+    struct PlayOptions
+    {
+        PlayMode mode = PlayMode::forward;
+        int transpose = 0;           // semitones
+        int scale = 0, root = 0;     // notes move down onto the scale
+        const UserScales* users = nullptr;
+    };
+
+    // step k of a pass through first..last; pingPong turns without repeating the ends, pingPong2 repeats
+    // them (random is drawn by the sequencer)
+    int passLength (PlayMode, int length) noexcept;
+    int stepInPass (PlayMode, int first, int last, int k) noexcept;
+
+    // whether a step with this chance plays on the given pass (random: a number 0..99)
+    bool chancePlays (int chance, int64_t pass, int random) noexcept;
+
+    // cutoff offset of the MOD track: mod ±64 = ± this many octaves
+    inline constexpr float modOctaves = 1.0f;
+
     class Sequencer
     {
     public:
@@ -28,11 +52,13 @@ namespace sb64::seq
         // one host sample: clocks, plays steps and ends gates
         void process (dsp::Voice&, PatternSource&, const Clock&) noexcept;
 
+        void setOptions (const PlayOptions& o) noexcept { options = o; }
+
         // lets go of the voice and waits for the next start
         void stop (dsp::Voice&) noexcept;
 
         // the next step played is the pattern's first
-        void reset() noexcept { position = -1; }
+        void reset() noexcept { position = -1; passStep = -1; pass = 0; }
 
         bool isRunning() const noexcept { return running; }
         int getPosition() const noexcept { return position; }   // step playing, -1 = none yet
@@ -56,6 +82,13 @@ namespace sb64::seq
 
         int position = -1;
         float progress = 0.0f;
+        PlayOptions options;
+
+        // internal clock: step within the pass and passes since the start
+        int passStep = -1;
+        int64_t pass = 0;
+        uint32_t randomState = 0x6d2b79f5u;
+        int random (int n) noexcept;
 
         // an offbeat waiting for its swing delay
         int64_t swingTick = -1;

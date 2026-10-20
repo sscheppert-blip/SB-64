@@ -2,6 +2,11 @@
 
 namespace sb64
 {
+    namespace
+    {
+        constexpr int digitsPerStep = (seq::Step::packedBits + 3) / 4, legacyDigits = 5;
+    }
+
     Patterns::Patterns()
     {
         fromTree ({});
@@ -10,6 +15,8 @@ namespace sb64
     void Patterns::select (int index, bool whenPlaying) noexcept
     {
         index = juce::jlimit (0, numPatterns - 1, index);
+        chainSize = 0;
+        chainPosition = 0;
 
         if (whenPlaying && index != current.load())
         {
@@ -22,10 +29,38 @@ namespace sb64
         }
     }
 
-    seq::Pattern& Patterns::startingOver() noexcept
+    void Patterns::addToChain (int index) noexcept
+    {
+        index = juce::jlimit (0, numPatterns - 1, index);
+        auto size = chainSize.load();
+
+        if (size >= maxChain)
+            return;
+
+        if (size == 0)
+        {
+            // the chain starts with the selected pattern
+            chain[0] = selectedIndex();
+            chainPosition = 0;
+            size = 1;
+        }
+
+        chain[(size_t) size] = index;
+        chainSize = size + 1;
+    }
+
+    seq::Pattern& Patterns::startingOver (bool afterPass) noexcept
     {
         if (const auto next = queued.exchange (-1); next >= 0)
+        {
             current = next;
+        }
+        else if (const auto size = chainSize.load(); size > 1 && afterPass)
+        {
+            const auto position = (chainPosition.load() + 1) % size;
+            chainPosition = position;
+            current = chain[(size_t) position].load();
+        }
 
         return playing();
     }
@@ -37,22 +72,37 @@ namespace sb64
 
     juce::String Patterns::stepsToString (const seq::Pattern& p)
     {
-        // 64 steps, five hex digits each
+        // 64 steps, eleven hex digits each
         juce::String text;
-        text.preallocateBytes (seq::maxSteps * 5);
+        text.preallocateBytes (seq::maxSteps * digitsPerStep);
 
         for (int i = 0; i < seq::maxSteps; ++i)
-            text << juce::String::toHexString ((juce::int64) p.get (i).pack()).paddedLeft ('0', 5);
+            text << juce::String::toHexString ((juce::int64) p.get (i).pack()).paddedLeft ('0', digitsPerStep);
 
         return text;
     }
 
     void Patterns::stepsFromString (seq::Pattern& p, const juce::String& text)
     {
+        // patterns saved before the step tracks had five digits per step (note, gate, on, accent, slide)
+        const auto digits = text.length() >= seq::maxSteps * digitsPerStep ? digitsPerStep : legacyDigits;
+
         for (int i = 0; i < seq::maxSteps; ++i)
         {
-            const auto digits = text.substring (i * 5, i * 5 + 5);
-            p.set (i, digits.length() == 5 ? seq::Step::unpack ((uint64_t) digits.getHexValue64()) : seq::Step {});
+            const auto field = text.substring (i * digits, i * digits + digits);
+
+            if (field.length() != digits)
+            {
+                p.set (i, seq::Step {});
+                continue;
+            }
+
+            auto step = seq::Step::unpack ((uint64_t) field.getHexValue64());
+
+            if (digits == legacyDigits)
+                step.pitchDecay = seq::Step {}.pitchDecay;
+
+            p.set (i, step);
         }
     }
 
@@ -85,6 +135,7 @@ namespace sb64
             p.clear();
 
         queued = -1;
+        chainSize = 0;
 
         if (! tree.isValid())
         {

@@ -6,6 +6,7 @@
 #include <clap-juce-extensions/clap-juce-extensions.h>
 
 #include "Patterns.h"
+#include "dsp/Arp.h"
 #include "dsp/Sequencer.h"
 #include "dsp/Voice.h"
 
@@ -48,6 +49,7 @@ public:
     juce::MidiKeyboardState& getKeyboardState() noexcept { return keyboardState; }
 
     sb64::Patterns& getPatterns() noexcept { return patterns; }
+    sb64::seq::UserScales& getUserScales() noexcept { return userScales; }
 
     // REC: notes from the step keys or MIDI go into the pattern – while stopped one step after the
     // other from the record position, while playing into the step at hand (or the next one, when the
@@ -56,6 +58,9 @@ public:
     bool isRecording() const noexcept { return recording.load(); }
     int getRecordStep() const noexcept { return recordStep.load(); }
     void setRecordStep (int step) noexcept { recordStep = juce::jlimit (0, sb64::seq::maxSteps - 1, step); }
+
+    // RND PATT: a new random pattern in the selected one (message thread)
+    void randomisePattern();
 
     struct Display
     {
@@ -77,7 +82,7 @@ private:
     sb64::dsp::Settings readSettings (double bpm) const noexcept;
     void handleMidi (const juce::MidiMessage&) noexcept;
     void playNote (int note, int velocity, bool slide) noexcept;
-    void record (int note, int velocity) noexcept;
+    void record (int note, int velocity, int gate = -1) noexcept;
 
     juce::AudioProcessorValueTreeState state;
 
@@ -87,11 +92,16 @@ private:
                           * noiseLevel, * lfoRate, * lfoLevel, * envAmount, * wave, * filterMode,
                           * lfoShape, * lfoSync, * lfoRange, * lfoReset, * lfoPhase, * slideTime, * accentVel,
                           * pitchEnvDepth, * pitchEnvDecay, * bendRange, * tune, * volume,
-                          * run, * tempo, * clock, * swing;
+                          * run, * tempo, * clock, * swing, * playMode, * transpose, * scale, * root,
+                          * masterSlide, * arp, * arpDir, * arpOct, * arpGate, * arpRhythm, * arpSource,
+                          * rndDensity, * rndAccent, * rndSlide, * rndOctaves, * rndMod;
     } refs {};
 
     sb64::dsp::Voice voice;
     sb64::seq::Sequencer sequencer;
+    sb64::seq::Arp arp;
+    sb64::seq::UserScales userScales;
+    double currentBpm = 120.0;
     sb64::Patterns patterns;
     std::atomic<bool> recording { false };
     std::atomic<int> recordStep { 0 };

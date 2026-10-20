@@ -5,7 +5,9 @@
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
 #include "Patterns.h"
+#include "dsp/Generator.h"
 #include "dsp/Lfo.h"
+#include "dsp/Scales.h"
 #include "dsp/Voice.h"
 
 #include <cmath>
@@ -756,6 +758,309 @@ static void testPanelSequencing()
 //   <paramId>=<value>      plain parameter value (e.g. cutoff=0.3 wave=0)
 //   note=<n>               hold one note instead of the riff
 //   seq                    play the selected pattern (the demo in A1) on the sequencer instead
+static void testStepTracks()
+{
+    // the new step fields survive packing, the save format and old saves
+    seq::Step s;
+    s.on = true; s.note = 40; s.gate = 70; s.mod = -64; s.pitchDepth = 9; s.pitchDecay = 2; s.cent = -50; s.chance = 12;
+    check (seq::Step::unpack (s.pack()) == s, "step tracks pack and unpack");
+    s.mod = 63; s.cent = 50; s.chance = 3;
+    check (seq::Step::unpack (s.pack()) == s, "positive mod and cent pack too");
+
+    seq::Pattern saved, loaded;
+    saved.set (5, s);
+    sb64::Patterns::stepsFromString (loaded, sb64::Patterns::stepsToString (saved));
+    check (loaded.get (5) == s, "step tracks are saved with the pattern");
+
+    // a pattern saved before the step tracks: five digits per step
+    juce::String old;
+    for (int i = 0; i < seq::maxSteps; ++i)
+        old << (i == 2 ? "0d9a4" : "01930");   // step 3: on, accent, note 36, gate 51
+    sb64::Patterns::stepsFromString (loaded, old);
+    const auto legacy = loaded.get (2);
+    check (legacy.on && legacy.accent && legacy.note == 36 && legacy.mod == 0 && legacy.chance == 0
+           && legacy.pitchDecay == seq::Step {}.pitchDecay, "old patterns still load");
+
+    // play modes
+    auto order = [] (seq::PlayMode mode)
+    {
+        juce::String text;
+        for (int k = 0; k < seq::passLength (mode, 4); ++k)
+            text << seq::stepInPass (mode, 2, 5, k);
+        return text;
+    };
+    check (order (seq::PlayMode::forward) == "2345" && order (seq::PlayMode::backward) == "5432", "FWD and BWD");
+    check (order (seq::PlayMode::pingPong) == "234543", "PP turns without repeating the ends");
+    check (order (seq::PlayMode::pingPong2) == "23455432", "PP2 repeats the ends");
+
+    // chances
+    int plays = 0;
+    for (int pass = 0; pass < 16; ++pass)
+        plays += seq::chancePlays (seq::firstRatio, pass, 0) ? 1 : 0;
+    check (plays == 2 && seq::chancePlays (seq::firstRatio, 0, 0) && ! seq::chancePlays (seq::firstRatio, 1, 0), "1/8 plays the first of eight passes");
+    check (seq::chancePlays (3, 0, 49) && ! seq::chancePlays (3, 0, 50), "50 % compares with the random number");
+
+    // scales
+    check (seq::quantise (61, 1, 0) == 60 && seq::quantise (64, 1, 0) == 64, "major scale moves C# down to C");
+    check (seq::quantise (56, 2, 9) == 55 && seq::quantise (57, 2, 9) == 57, "A minor moves G# down to G");
+
+    // per-step pitch envelope on the voice
+    {
+        dsp::Voice voice;
+        voice.setSettings (openSettings (dsp::Wave::saw));
+        voice.prepare (testRate);
+        voice.setStepPitchEnvelope (9, 0.5f);
+        voice.noteOn (45.0f, false, dsp::Transition::retrigger);
+        std::vector<float> out ((size_t) (0.5 * testRate));
+        voice.render (out.data(), (int) out.size());
+        check (frequencyOf (out, 0, (size_t) (0.004 * testRate)) > 400.0, "a step's own pitch envelope starts high");
+        check (std::abs (frequencyOf (out, (size_t) (0.35 * testRate), out.size()) - 110.0) < 1.0, "and falls back to the note");
+    }
+
+    // random generator
+    {
+        seq::Pattern p;
+        p.setLast (31);
+        p.setFirst (16);
+        seq::RandomSettings r;
+        r.density = 90;
+        r.scale = 2;
+        r.root = 9;
+        r.octaves = 2;
+        seq::randomise (p, r, 1234);
+        int on = 0;
+        bool inScale = true, outsideUntouched = true;
+        for (int i = 0; i < seq::maxSteps; ++i)
+        {
+            const auto step = p.get (i);
+            if (i < 16 || i > 31)
+                outsideUntouched = outsideUntouched && step == seq::Step {};
+            else if (step.on)
+            {
+                ++on;
+                inScale = inScale && seq::inScale (step.note, 2, 9);
+            }
+        }
+        check (on >= 10 && inScale, "RND PATT writes notes of the scale");
+        check (outsideUntouched, "RND PATT stays between the first and last step");
+    }
+
+    // arpeggiator notes
+    {
+        seq::ArpSettings a;
+        a.octaves = 2;
+        check (seq::Arp::sequence ({ 55, 48, 52 }, a) == std::vector<int> { 48, 52, 55, 60, 64, 67 }, "arp plays up over two octaves");
+        a.octaves = 1;
+        a.direction = seq::ArpDirection::upDown;
+        check (seq::Arp::sequence ({ 48, 52, 55, 59 }, a) == std::vector<int> { 48, 52, 55, 59, 55, 52 }, "arp up & down");
+        a.direction = seq::ArpDirection::down;
+        a.scaleSource = true;
+        a.scale = 3;
+        check (seq::Arp::sequence ({ 50 }, a) == std::vector<int> { 59, 57, 54, 52, 50 }, "arp source SCL plays the scale from the key");
+    }
+}
+
+static void testPhase3Sequencing()
+{
+    {
+        // BWD on the sequencer
+        SeqRig rig;
+        for (int i = 0; i < 4; ++i)
+            rig.setStep (i, 45);
+        rig.pattern().setLast (3);
+        setParam (rig.processor, id::playMode, 1.0f);
+        setParam (rig.processor, id::run, 1.0f);
+        juce::String steps;
+        for (int i = 0; i < 6; ++i)
+        {
+            rig.run (i == 0 ? 1 : 60);
+            steps << rig.step();
+        }
+        check (steps == "321032", "BWD plays the steps backwards");
+    }
+
+    {
+        // a step at 1/8 plays on the first of eight passes (one-step pattern: one pass per step)
+        SeqRig rig;
+        rig.setStep (0, 45, 50);
+        auto step = rig.pattern().get (0);
+        step.chance = seq::firstRatio;
+        rig.pattern().set (0, step);
+        rig.pattern().setLast (0);
+        setParam (rig.processor, id::run, 1.0f);
+        const auto gates = rig.run (60 * 9);
+        bool rest = true;
+        for (int pass = 1; pass < 8; ++pass)
+            rest = rest && ! gates[(size_t) (pass * 60 + 10)];
+        check (gates[10] && rest && gates[8 * 60 + 10], "ratio 1/8 skips seven passes");
+    }
+
+    {
+        // chain: A1, A2, A1, ...
+        SeqRig rig;
+        auto& patterns = rig.processor.getPatterns();
+        rig.setStep (0, 45);
+        patterns.pattern (1).clear();
+        patterns.pattern (1).set (0, rig.pattern().get (0));
+        patterns.select (0, false);
+        patterns.addToChain (1);
+        setParam (rig.processor, id::run, 1.0f);
+        rig.run (60 * 20);
+        const auto second = patterns.playingIndex();
+        rig.run (60 * 16);
+        const auto third = patterns.playingIndex();
+        check (patterns.chainLength() == 2 && second == 1 && third == 0, "a chain plays its patterns in turn");
+    }
+
+    {
+        // the arpeggiator plays held notes in 16ths
+        SeqRig rig;
+        setParam (rig.processor, id::arp, 1.0f);
+        setParam (rig.processor, id::arpGate, 50.0f);
+        juce::MidiBuffer midi;
+        midi.addEvent (juce::MidiMessage::noteOn (1, 48, (juce::uint8) 90), 0);
+        midi.addEvent (juce::MidiMessage::noteOn (1, 55, (juce::uint8) 90), 0);
+        const auto gates = rig.run (240, midi);
+        check (gates[10] && ! gates[40] && gates[70] && ! gates[100], "ARP plays the held notes in 16ths");
+        juce::MidiBuffer off;
+        off.addEvent (juce::MidiMessage::noteOff (1, 48), 0);
+        off.addEvent (juce::MidiMessage::noteOff (1, 55), 0);
+        const auto after = rig.run (120, off);
+        check (! after[30] && ! after[90], "ARP stops when the keys are let go");
+    }
+
+    {
+        // the panel: SHIFT functions for the step tracks
+        SB64AudioProcessor processor;
+        std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditor());
+        auto& panel = dynamic_cast<SB64AudioProcessorEditor&> (*editor).getPanel();
+        auto& p = processor.getPatterns().selected();
+        p.clear();
+
+        panel.setShift (true);
+        panel.pressKey (2);   // MOD
+        panel.pressKey (4);
+        panel.turnNote (5);
+        check (p.get (4).mod == 5 && panel.getDisplayText() == "+5", "SHIFT + MOD: a key picks the step, NOTE sets its offset");
+        panel.back();
+        panel.back();
+
+        panel.setShift (true);
+        panel.pressKey (3);   // PITCH ENV
+        panel.pressKey (6);
+        panel.turnNote (3);
+        panel.turnSelect (2);
+        check (p.get (6).pitchDepth == 3 && p.get (6).pitchDecay == 6, "SHIFT + PITCH ENV: NOTE sets the depth, SELECT the decay");
+        panel.back();
+        panel.back();
+
+        panel.pressKey (7);
+        panel.clickSelectEncoder();
+        panel.turnSelect (3);
+        check (p.get (7).chance == 3 && panel.getDisplayText() == "50", "a click on SELECT switches to the step's chance");
+        panel.clickSelectEncoder();
+        panel.turnSelect (-2, true);
+        check (p.get (7).cent == -2, "and then to its fine tune");
+        panel.back();
+
+        panel.setShift (true);
+        panel.pressKey (5);   // PLAY MODE
+        panel.turnNote (3);
+        check (sb64::menu::valueText (processor.getState(), id::playMode) == "PP", "SHIFT + PLAY MODE opens the play mode");
+        panel.back();
+
+        panel.setShift (true);
+        panel.pressKey (8);   // ARPEGG
+        check (processor.getState().getRawParameterValue (id::arp)->load() > 0.5f, "SHIFT + ARPEGG switches the arpeggiator on");
+
+        p.clear();
+        panel.setShift (true);
+        panel.pressKey (10);   // RND PATT
+        check (! p.isEmpty(), "SHIFT + RND PATT writes a random pattern");
+
+        panel.setShift (true);
+        panel.pressKey (15);   // PATTERN
+        panel.pressKey (2);
+        panel.pressKey (3);
+        check (processor.getPatterns().selectedIndex() == 2 && processor.getPatterns().chainLength() == 2,
+               "PATTERN, then more keys chain patterns");
+    }
+}
+
+
+static void testUserScalesAndKeyboard()
+{
+    // user scales: notes and detune
+    {
+        seq::UserScales users;
+        users.setMask (0, seq::scaleMasks[1]);   // major
+        users.setCents (0, 4, -14);
+        const auto u1 = seq::numFactoryScales;
+        check (seq::quantise (61, u1, 0, &users) == 60 && seq::inScale (64, u1, 0, &users), "a user scale moves notes onto its own notes");
+        check (std::abs (seq::tuning (64, u1, 0, &users) + 0.14f) < 1.0e-5f && seq::tuning (60, u1, 0, &users) == 0.0f,
+               "a user scale detunes single notes (microtonal)");
+        users.setMask (0, 0);
+        check (users.mask (0) == 1u, "the root stays in a user scale");
+    }
+
+    {
+        // saved with the project
+        SB64AudioProcessor processor;
+        processor.getUserScales().setMask (3, seq::scaleMasks[2]);
+        processor.getUserScales().setCents (3, 7, 22);
+        juce::MemoryBlock block;
+        processor.getStateInformation (block);
+        SB64AudioProcessor other;
+        other.setStateInformation (block.getData(), (int) block.getSize());
+        check (other.getUserScales().mask (3) == seq::scaleMasks[2] && other.getUserScales().cents (3, 7) == 22
+               && other.getUserScales().isDefault (0), "user scales are saved with the project");
+    }
+
+    {
+        // REC with the arpeggiator: its notes go into the pattern, one step after the other
+        SeqRig rig;
+        setParam (rig.processor, id::arp, 1.0f);
+        setParam (rig.processor, id::arpGate, 40.0f);
+        rig.processor.setRecording (true);
+        rig.processor.setRecordStep (0);
+        juce::MidiBuffer midi;
+        midi.addEvent (juce::MidiMessage::noteOn (1, 48, (juce::uint8) 90), 0);
+        midi.addEvent (juce::MidiMessage::noteOn (1, 55, (juce::uint8) 90), 0);
+        rig.run (60 * 4 - 30, midi);
+        const auto& p = rig.pattern();
+        check (p.get (0).note == 48 && p.get (1).note == 55 && p.get (2).note == 48 && p.get (3).note == 55
+               && p.get (0).gate == 40 && ! p.get (4).on, "REC records the arpeggiator's notes");
+    }
+
+    {
+        SB64AudioProcessor processor;
+        std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditor());
+        auto& panel = dynamic_cast<SB64AudioProcessorEditor&> (*editor).getPanel();
+        auto& p = processor.getPatterns().selected();
+        p.clear();
+
+        // keyboard mode: the keys play notes without recording
+        panel.setKeyboardMode (true);
+        panel.pressKey (0);
+        check (processor.getKeyboardState().isNoteOn (1, 36) && p.isEmpty(), "keyboard mode plays notes");
+        panel.releaseKey (0);
+        panel.setKeyboardMode (false);
+
+        // SHIFT + SCALE on a user scale: the keys edit it
+        setParam (processor, id::scale, (float) seq::numFactoryScales);   // U1
+        panel.setShift (true);
+        panel.pressKey (7);   // SCALE
+        panel.pressKey (1);
+        panel.pressKey (1);
+        check ((processor.getUserScales().mask (0) & 2u) == 0, "a second press takes a note out of the user scale");
+        panel.pressKey (4);
+        panel.turnNote (-3);
+        check (processor.getUserScales().cents (0, 4) == -15 && panel.getDisplayText() == "-15", "NOTE detunes the picked note");
+        panel.pressKey (1);
+        check ((processor.getUserScales().mask (0) & 2u) != 0, "a press puts it back");
+    }
+}
+
 static bool renderToFile (const juce::String& path, const juce::StringArray& options)
 {
     constexpr int sampleRate = 48000, block = 480;
@@ -955,6 +1260,9 @@ int main (int argc, char** argv)
     testEditor();
     testSequencer();
     testPanelSequencing();
+    testStepTracks();
+    testPhase3Sequencing();
+    testUserScalesAndKeyboard();
 
     std::printf ("\n%s (%d failure%s)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures, failures == 1 ? "" : "s");
     return failures == 0 ? 0 : 1;

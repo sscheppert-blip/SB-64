@@ -25,12 +25,18 @@ namespace sb64
         int playingIndex() const noexcept { return current.load(); }
         bool isQueued() const noexcept { return queued.load() >= 0; }
 
-        // whenPlaying: wait for the end of the playing pattern
+        // whenPlaying: wait for the end of the playing pattern; ends a chain
         void select (int index, bool whenPlaying) noexcept;
+
+        // chain: after the selected pattern the next ones of the chain follow, pass by pass (not saved)
+        static constexpr int maxChain = 16;
+        void addToChain (int index) noexcept;
+        int chainLength() const noexcept { return chainSize.load(); }
+        int chainEntry (int i) const noexcept { return chain[(size_t) juce::jlimit (0, maxChain - 1, i)].load(); }
 
         // PatternSource (audio thread)
         seq::Pattern& playing() noexcept override { return pattern (current.load()); }
-        seq::Pattern& startingOver() noexcept override;
+        seq::Pattern& startingOver (bool afterPass) noexcept override;
 
         // "A1" .. "H16"
         static juce::String name (int index);
@@ -47,5 +53,7 @@ namespace sb64
     private:
         std::array<seq::Pattern, numPatterns> patterns;
         std::atomic<int> current { 0 }, queued { -1 };
+        std::array<std::atomic<int>, maxChain> chain {};
+        std::atomic<int> chainSize { 0 }, chainPosition { 0 };
     };
 }
