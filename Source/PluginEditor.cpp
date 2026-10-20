@@ -3,6 +3,8 @@
 #include "Parameters.h"
 #include "dsp/Scales.h"
 
+#include <utility>
+
 namespace
 {
     namespace id = sb64::params::id;
