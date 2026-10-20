@@ -1,13 +1,16 @@
 # SB-64
 
-Analog-style acid bassline synthesizer plugin with a 64-step sequencer. Planned as AU, VST3 and CLAP
+Analog-style acid bassline synthesizer plugin with a 64-step sequencer. AU, VST3, CLAP and standalone
 for macOS, Windows and Linux, built with JUCE.
 
-> **Status: planning.** Nothing to download yet.
+> **Status: early version (0.1).** Everything works; fine sound tuning and factory presets are
+> still to come. Downloads under **Releases**.
+
+**Manual:** [English](docs/Manual.md) · [Deutsch](docs/Handbuch.md)
 
 ![SB-64 panel mockup – coming soon](docs/images/panel-coming-soon.png)
 
-## Planned features
+## Features
 
 - **Voice:** one oscillator (saw, square, triangle) with a sub oscillator one octave down, noise and
   audio-rate FM from the LFO
@@ -21,3 +24,19 @@ for macOS, Windows and Linux, built with JUCE.
   arpeggiator and a random pattern generator
 - **Memory:** 8 banks × 16 patterns, pattern chaining
 - **MIDI:** play it from a keyboard, sync to the host tempo
+
+## Installation
+
+Installation is explained in the manual ([English](docs/Manual.md#2-installation) ·
+[Deutsch](docs/Handbuch.md#2-installation)).
+
+**macOS:** the plugins are not notarized by Apple, so macOS may block them. The manual explains the
+one-line fix ([English](docs/Manual.md#unblocking-plugins-on-macos) ·
+[Deutsch](docs/Handbuch.md#plugins-auf-macos-freigeben)).
+
+## License
+
+Public domain ([Unlicense](LICENSE)) – do whatever you like with it, no credit needed.
+The plugins are built with [JUCE](https://juce.com), which has its own license terms.
+
+<sub>Building from source: [docs/Development.md](docs/Development.md)</sub>
