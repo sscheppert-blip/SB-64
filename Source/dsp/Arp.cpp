@@ -36,15 +36,16 @@ namespace sb64::seq
     {
         // sorted, without repeats (no allocation: this runs on the audio thread)
         std::array<int, 128> base {};
+        int* const b = base.data();
         int numBase = 0;
 
-        for (int i = 0; i < count; ++i)
+        for (int i = 0; i < std::min (count, (int) base.size()); ++i)
         {
             const auto n = heldNotes[i];
-            auto* pos = std::lower_bound (base.begin(), base.begin() + numBase, n);
-            if (pos != base.begin() + numBase && *pos == n)
+            int* pos = std::lower_bound (b, b + numBase, n);
+            if (pos != b + numBase && *pos == n)
                 continue;
-            std::copy_backward (pos, base.begin() + numBase, base.begin() + numBase + 1);
+            std::copy_backward (pos, b + numBase, b + numBase + 1);
             *pos = n;
             ++numBase;
         }
