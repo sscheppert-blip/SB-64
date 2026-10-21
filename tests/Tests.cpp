@@ -1247,9 +1247,14 @@ static void testHardwareFeatures()
         // program change picks a pattern
         SeqRig rig;
         juce::MidiBuffer midi;
-        midi.addEvent (juce::MidiMessage::programChange (1, 37), 0);
+        midi.addEvent (juce::MidiMessage::controllerEvent (1, 32, 2), 0);
+        midi.addEvent (juce::MidiMessage::programChange (1, 5), 1);
         rig.run (1, midi);
-        check (rig.processor.getPatterns().selectedIndex() == 37, "MIDI program change selects a pattern (37 = C6)");
+        check (rig.processor.getPatterns().selectedIndex() == 2 * 16 + 5, "bank select + program change pick a pattern (C6)");
+        juce::MidiBuffer high;
+        high.addEvent (juce::MidiMessage::programChange (1, 20), 0);
+        rig.run (1, high);
+        check (rig.processor.getPatterns().selectedIndex() == 2 * 16 + 5, "program changes above 15 are ignored, as on the hardware");
     }
 
     {
@@ -1281,6 +1286,30 @@ static void testHardwareFeatures()
         a.patternNotes = notes;
         a.numPatternNotes = 4;
         check (seq::Arp::sequence ({ 50 }, a) == std::vector<int> { 50, 57, 53, 62 }, "arp source PAT plays the pattern's notes");
+    }
+
+    {
+        // the mod wheel opens the filter
+        auto brightness = [] (float wheel)
+        {
+            auto s = openSettings (dsp::Wave::saw);
+            s.cutoff = 0.3f;
+            dsp::Voice voice;
+            voice.setSettings (s);
+            voice.prepare (testRate);
+            voice.setModWheel (wheel);
+            voice.noteOn (45.0f, false, dsp::Transition::retrigger);
+            std::vector<float> out ((size_t) (0.3 * testRate));
+            voice.render (out.data(), (int) out.size());
+            double d = 0.0, e = 0.0;
+            for (auto i = out.size() / 2; i < out.size(); ++i)
+            {
+                d += std::pow (out[i] - out[i - 1], 2.0);
+                e += std::pow (out[i], 2.0);
+            }
+            return d / std::max (1.0e-12, e);
+        };
+        check (brightness (1.0f) > 4.0 * brightness (0.0f), "the mod wheel (CC 1) raises the cutoff, as on the hardware");
     }
 }
 

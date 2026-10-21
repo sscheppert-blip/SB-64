@@ -3,7 +3,7 @@
 Analog-style acid bassline synthesizer plugin with a 64-step sequencer. AU, VST3, CLAP and standalone
 for macOS, Windows and Linux, built with JUCE.
 
-> **Status: early version (0.2).** Everything works; fine sound tuning by ear is still going on.
+> **Status: early version (0.2.1).** Everything works; fine sound tuning by ear is still going on.
 > Downloads under **Releases**.
 
 **Manual:** [English](docs/Manual.md) · [Deutsch](docs/Handbuch.md)
@@ -24,8 +24,8 @@ for macOS, Windows and Linux, built with JUCE.
   arpeggiator and a random pattern generator
 - **Memory:** 8 banks × 16 patterns, each with its own play direction and first/last step; pattern chaining
 - **Factory sounds:** 16 sounds, on the panel and as host programs
-- **MIDI:** play it from a keyboard, sync to the host tempo, pick patterns by program change; the
-  sequencer and arpeggiator send their notes to MIDI out
+- **MIDI:** play it from a keyboard, sync to the host tempo, mod wheel onto the cutoff, patterns by bank
+  select + program change; the sequencer and arpeggiator send their notes to MIDI out
 
 ## Installation
 

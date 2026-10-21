@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(SB64 VERSION 0.2.0 LANGUAGES C CXX)
+project(SB64 VERSION 0.2.1 LANGUAGES C CXX)
 
 option(SB64_BUILD_TESTS "Build the offline tests" ON)
 option(SB64_COPY_PLUGIN "Copy the built plugins into the user's plugin folders" ON)

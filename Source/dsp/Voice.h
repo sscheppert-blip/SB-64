@@ -69,6 +69,10 @@ namespace sb64::dsp
         // the sequencer's MOD track: added to the cutoff, in octaves
         void setCutoffOffset (float octaves) noexcept { cutoffOffset = octaves; }
 
+        // the mod wheel (0..1) raises the cutoff on top of the knob, up to the knob's whole range
+        void setModWheel (float amount) noexcept { modWheel.target = std::clamp (amount, 0.0f, 1.0f) * modWheelOctaves; }
+        static constexpr float modWheelOctaves = 9.2f;
+
         // a step's own pitch envelope for the next new note (depth 1..9, decay 0..1); depth < 0 = the
         // settings' envelope
         void setStepPitchEnvelope (int depth, float decay) noexcept { stepPitchDepth = depth; stepPitchDecay = decay; }
@@ -138,6 +142,7 @@ namespace sb64::dsp
         // drive and output
         float lowShelf = 0.0f, lowShelfCoef = 0.0f, dcIn = 0.0f, dcOut = 0.0f, dcCoef = 0.0f;
 
+        Smoothed modWheel;
         Smoothed cutoffOct, resonance, subLevel, noiseLevel, detune, drive, fmDepth, lfoLevel, envAmount, volume;
 
         Lfo lfo;

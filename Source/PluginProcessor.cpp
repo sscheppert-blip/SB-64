@@ -198,10 +198,29 @@ void SB64AudioProcessor::handleMidi (const juce::MidiMessage& message) noexcept
         else if (wasSounding)
             playNote (heldNotes.back(), 0, true);   // back to the note still held
     }
+    else if (message.isController())
+    {
+        const auto value = message.getControllerValue();
+
+        switch (message.getControllerNumber())
+        {
+            case 0:  bankMsb = value; break;
+            case 32: bankLsb = value; break;
+            case 1:  modWheelMsb = value; modWheelLsb = 0; break;
+            case 33: modWheelLsb = value; break;
+            default: break;
+        }
+
+        voice.setModWheel ((float) ((modWheelMsb << 7) | modWheelLsb) / 16383.0f);
+    }
     else if (message.isProgramChange())
     {
-        // program change picks a pattern: 0..127 = A1..H16 (while playing, at the end of the current one)
-        patterns.select (message.getProgramChangeNumber(), sequencer.isRunning());
+        // bank select picks the bank, program change 0..15 the pattern in it (while playing, at the
+        // end of the current one); like the hardware, anything else is ignored
+        const auto bank = (bankMsb << 7) | bankLsb, program = message.getProgramChangeNumber();
+
+        if (bank < sb64::Patterns::numBanks && program < sb64::Patterns::patternsPerBank)
+            patterns.select (bank * sb64::Patterns::patternsPerBank + program, sequencer.isRunning());
     }
     else if (message.isPitchWheel())
     {

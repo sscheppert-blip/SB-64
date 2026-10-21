@@ -399,7 +399,8 @@ namespace sb64::dsp
         // sources into the filter
         const auto in = oscillator (frequency) + 0.6f * noiseLevel.value * noise();
 
-        const auto cutoffOctaves = cutoffOct.value + cutoffOffset + settings.drift * driftCutoff * 0.15f + vcf.level * (envAmount.value + accentOpen.value)
+        modWheel.step (smoothing);
+        const auto cutoffOctaves = cutoffOct.value + cutoffOffset + modWheel.value + settings.drift * driftCutoff * 0.15f + vcf.level * (envAmount.value + accentOpen.value)
                                  + lfoLevel.value * lfoValue;
         const auto filtered = filter (in, std::exp2 (std::min (cutoffOctaves, 15.0f)));
 

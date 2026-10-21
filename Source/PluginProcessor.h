@@ -132,6 +132,9 @@ private:
     std::vector<int> heldNotes;
     int pitchWheel = 8192;
 
+    // as on the hardware: CC 1/33 = mod wheel (onto the cutoff), CC 0/32 = bank for program change
+    int modWheelMsb = 0, modWheelLsb = 0, bankMsb = 0, bankLsb = 0;
+
     std::unique_ptr<juce::dsp::Oversampling<float>> oversampler;
     juce::AudioBuffer<float> zeroBuffer, oversampledBuffer;
     int oversamplingFactor = 1;

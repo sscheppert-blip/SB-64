@@ -380,7 +380,13 @@ zurück. Gefällt dir ein Zwischenstand, vorher **COPY**.
 
 - **MIDI-Noten** spielen SB-64 direkt: monophon, der zuletzt gedrückte Ton gewinnt. Gebunden gespielt
   gleitet er (Dauer: `MSL`). Anschlagstärke ab `ACC` (Standard 100) = Accent. **Pitchbend** mit Bereich `BND`.
-- **Program Change** 0–127 wählt ein Pattern (A1 … H16) – läuft der Sequencer, am Ende des aktuellen.
+- **Mod-Wheel** (CC 1, fein mit CC 33) öffnet wie am Original das Filter zusätzlich zum CUTOFF-Regler –
+  voll aufgedreht über den ganzen Regelbereich.
+- **Patterns per MIDI:** Bank Select (CC 32, bzw. CC 0/32 als 14-Bit-Wert) wählt die Bank 0–7 (A–H),
+  **Program Change 0–15** das Pattern darin – läuft der Sequencer, am Ende des aktuellen. Höhere Werte
+  werden wie am Original ignoriert.
+- **CC 123** (All Notes Off) beendet hängende Töne. Weitere CCs wertet das Original nicht aus, SB-64
+  auch nicht – Regler automatisierst du über die DAW.
 - **MIDI-Out:** Sequencer und Arp geben ihre Töne als MIDI aus (Kanal 1, Accent = Anschlag 127, Slides
   überlappend). So steuert SB-64 andere Instrumente – in der DAW eine MIDI-Spur mit SB-64 als Eingang
   anlegen. (Manche Hosts, z. B. Logic, nehmen MIDI von Instrumenten nicht an.)

@@ -376,7 +376,13 @@ Like an in-between result? **COPY** it first.
 
 - **MIDI notes** play SB-64 directly: mono, last note wins, legato glides (time: `MSL`). Velocity from
   `ACC` (default 100) = accent. **Pitch bend** with range `BND`.
-- **Program change** 0–127 picks a pattern (A1 … H16) – while running, at the end of the current one.
+- **Mod wheel** (CC 1, fine with CC 33) opens the filter on top of the CUTOFF knob, as on the original –
+  fully up, across the knob's whole range.
+- **Patterns by MIDI:** bank select (CC 32, or CC 0/32 as a 14-bit value) picks bank 0–7 (A–H),
+  **program change 0–15** the pattern in it – while running, at the end of the current one. Higher
+  values are ignored, as on the original.
+- **CC 123** (all notes off) ends hanging notes. The original reads no other CCs, and neither does
+  SB-64 – automate the knobs from the DAW.
 - **MIDI out:** the sequencer and the arp send their notes as MIDI (channel 1, accent = velocity 127,
   slides overlapping). So SB-64 can drive other instruments – in the DAW, add a MIDI track with SB-64
   as its input. (Some hosts, e.g. Logic, don't take MIDI from instruments.)
