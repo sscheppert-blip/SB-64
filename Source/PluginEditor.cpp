@@ -1,7 +1,9 @@
 #include "PluginEditor.h"
+#include "FactoryPresets.h"
 #include "Menu.h"
 #include "Parameters.h"
 #include "dsp/Scales.h"
+#include "dsp/Sequencer.h"
 
 #include <utility>
 
@@ -88,7 +90,12 @@ FrontPanel::FrontPanel (SB64AudioProcessor& p) : processor (p)
     knob (id::fmLevel, 102, 550, 48);
     knob (id::subLevel, 307, 550, 48);
     knob (id::noiseLevel, 510, 550, 48);
-    knob (id::lfoRate, 1063, 550, 48);
+    auto& rate = knob (id::lfoRate, 1063, 550, 48);
+    rate.onTouch = [this]
+    {
+        lfoViewUntil = juce::Time::getMillisecondCounterHiRes() + 2000.0;
+        showText (sb64::menu::valueText (processor.getState(), id::lfoRate));
+    };
     knob (id::lfoLevel, 1270, 550, 48);
     knob (id::envAmount, 1470, 550, 48);
 
@@ -244,7 +251,13 @@ void FrontPanel::changeMenuValue (int steps, bool fine)
         return;
     }
 
-    sb64::menu::step (processor.getState(), sb64::menu::items()[(size_t) menuIndex].paramId, steps, fine);
+    const juce::String item (sb64::menu::items()[(size_t) menuIndex].paramId);
+
+    if (item == sb64::menu::presetItem)
+        processor.setCurrentProgram (processor.getCurrentProgram() + steps);
+    else
+        sb64::menu::step (processor.getState(), item, steps, fine);
+
     transientUntil = menuNameUntil = 0.0;
     menuUntil = now + 5000.0;
     updateDisplay (now);
@@ -288,8 +301,46 @@ void FrontPanel::clickSelect()
     selectMenu (0);
 }
 
+bool FrontPanel::liveMod (int steps)
+{
+    const auto playing = processor.getDisplay().step.load();
+
+    if (keyMode != KeyMode::mod || selectedStep >= 0 || ! processor.getDisplay().running.load() || playing < 0)
+        return false;
+
+    const auto now = juce::Time::getMillisecondCounterHiRes();
+
+    // a new turn starts from the playing step's value
+    if (now >= liveModUntil)
+        liveModValue = pattern().get (playing).mod;
+
+    liveModValue = juce::jlimit (seq::minMod, seq::maxMod, liveModValue + steps);
+    auto step = pattern().get (playing);
+    step.mod = liveModValue;
+    pattern().set (playing, step);
+    liveModStep = playing;
+    liveModUntil = now + 1000.0;
+    showText (signedText (liveModValue));
+    return true;
+}
+
+bool FrontPanel::showsLfo (double now) const
+{
+    if (now < lfoViewUntil)
+        return true;
+
+    if (now >= menuUntil)
+        return false;
+
+    const juce::String item (sb64::menu::items()[(size_t) menuIndex].paramId);
+    return item == id::lfoShape || item == id::lfoSync || item == id::lfoRange || item == id::lfoReset || item == id::lfoPhase;
+}
+
 void FrontPanel::turnSelect (int steps, bool fine)
 {
+    if (liveMod (steps * (fine ? 1 : 8)))
+        return;
+
     if (selectedStep >= 0 && ! processor.isRecording())
     {
         auto step = pattern().get (selectedStep);
@@ -327,6 +378,9 @@ void FrontPanel::turnSelect (int steps, bool fine)
 
 void FrontPanel::turnNote (int steps, bool fine)
 {
+    if (liveMod (steps))
+        return;
+
     if (keyMode == KeyMode::scale && scaleDegree >= 0 && editedScale() >= 0)
     {
         // detunes the picked note of the user scale
@@ -451,6 +505,13 @@ void FrontPanel::showBar (int newBar)
 
 void FrontPanel::octave (int direction)
 {
+    if (keyMode == KeyMode::transpose)
+    {
+        transposeOctave = juce::jlimit (-2, 1, transposeOctave + direction);
+        showText ("O" + signedText (transposeOctave));
+        return;
+    }
+
     if (selectedStep >= 0 && ! processor.isRecording())
     {
         auto step = pattern().get (selectedStep);
@@ -521,6 +582,16 @@ void FrontPanel::pressKey (int key, bool shiftModifier)
             showText (signedText (step.mod), 0.8);
             break;
 
+        case KeyMode::transpose:
+        {
+            // keys 1..13: up 0..12 semitones (plus the octave from ±1 OCT); key 16: back to 0
+            const auto semitones = key < 13 ? key + 12 * transposeOctave : 0;
+            processor.setLiveTranspose (semitones);
+            transposeKey = key;
+            showText ("T" + signedText (processor.getLiveTranspose()), 0.8);
+            break;
+        }
+
         case KeyMode::scale:
         {
             // keys 1..12: the notes above the root; a key adds or removes its note and picks it for NOTE
@@ -565,6 +636,11 @@ void FrontPanel::pressKey (int key, bool shiftModifier)
 
 void FrontPanel::releaseKey (int key)
 {
+    // without latch, a transpose only lasts while its key is held
+    if (keyMode == KeyMode::transpose && key == std::exchange (transposeKey, -1)
+        && processor.getState().getRawParameterValue (id::transposeLatch)->load() < 0.5f)
+        processor.setLiveTranspose (0);
+
     if (const auto note = std::exchange (keyNotes[(size_t) key], -1); note >= 0)
         processor.getKeyboardState().noteOff (1, note, 0.0f);
 }
@@ -589,8 +665,15 @@ void FrontPanel::function (int key)
             break;
         }
 
-        case fnPlayMode:  openMenuAt (id::playMode); break;
-        case fnTranspose: openMenuAt (id::transpose); break;
+        case fnPlayMode:
+            pending = Pending::playMode;
+            showText (seq::playModeNames[pattern().playMode()], 0.8);
+            break;
+        case fnTranspose:
+            keyMode = keyMode == KeyMode::transpose ? KeyMode::steps : KeyMode::transpose;
+            selectedStep = -1;
+            showText (keyMode == KeyMode::transpose ? "T" + signedText (processor.getLiveTranspose()) : juce::String ("STP"), 0.8);
+            break;
         case fnScale:
             // a user scale: the keys edit it; a factory scale: the menu picks one
             if (editedScale() >= 0)
@@ -620,7 +703,11 @@ void FrontPanel::function (int key)
             showText ("RND", 0.8);
             break;
 
-        case fnLastStep: pending = Pending::lastStep; showText ("LST", 0.8); break;
+        case fnLastStep:
+            // a second SHIFT + LAST STEP picks the first step instead
+            pending = pending == Pending::lastStep ? Pending::firstStep : Pending::lastStep;
+            showText (pending == Pending::lastStep ? "LST" : "FST", 0.8);
+            break;
         case fnClear:    pending = Pending::clear;    showText ("CLR", 0.8); break;
         case fnBank:     pending = Pending::bank;     showText ("BNK", 0.8); break;
         case fnPattern:  pending = Pending::pattern;  showText ("PAT", 0.8); break;
@@ -663,6 +750,22 @@ void FrontPanel::choose (int key)
             break;
         }
 
+        case Pending::firstStep:
+        {
+            const auto first = bar * seq::stepsPerBar + key;
+            pattern().setFirst (first);
+            showText ("F" + juce::String (first + 1));
+            break;
+        }
+
+        case Pending::playMode:
+            if (key < seq::numPlayModes)
+            {
+                pattern().setPlayMode (key);
+                showText (seq::playModeNames[key]);
+            }
+            break;
+
         case Pending::bank:
         {
             if (key >= Patterns::numBanks)
@@ -678,6 +781,16 @@ void FrontPanel::choose (int key)
         case Pending::pattern:
         {
             const auto index = patterns.selectedIndex() / Patterns::patternsPerBank * Patterns::patternsPerBank + key;
+
+            // the pattern that's already selected: back to how it was when it was picked
+            if (index == patterns.selectedIndex())
+            {
+                patterns.reload();
+                selectedStep = -1;
+                showText ("RLD");
+                break;
+            }
+
             patterns.select (index, running);
             selectedStep = -1;
             bar = 0;
@@ -741,6 +854,15 @@ void FrontPanel::timerCallback()
     playButton->setLit (running || (armed && blink));
     recButton->setLit (processor.isRecording());
 
+    // MOD live: the value goes on into each step that comes along while the encoder is still moving
+    if (keyMode == KeyMode::mod && now < liveModUntil && running && d.step.load() >= 0 && d.step.load() != liveModStep)
+    {
+        liveModStep = d.step.load();
+        auto step = pattern().get (liveModStep);
+        step.mod = liveModValue;
+        pattern().set (liveModStep, step);
+    }
+
     if (pending == Pending::chain && now > chainUntil)
         pending = Pending::none;
 
@@ -762,12 +884,16 @@ void FrontPanel::updateDisplay (double now)
     else if (now < menuUntil)
     {
         const auto& item = sb64::menu::items()[(size_t) menuIndex];
-        display->setText (now < menuNameUntil ? juce::String (item.name)
-                                              : sb64::menu::valueText (processor.getState(), item.paramId));
+        const auto value = juce::String (item.paramId) == sb64::menu::presetItem
+                               ? juce::String (sb64::presets::factory()[(size_t) processor.getCurrentProgram()].code)
+                               : sb64::menu::valueText (processor.getState(), item.paramId);
+        display->setText (now < menuNameUntil ? juce::String (item.name) : value);
     }
     else if (pending != Pending::none)
     {
-        display->setText (pending == Pending::lastStep ? "LST" : pending == Pending::clear ? "CLR"
+        display->setText (pending == Pending::lastStep ? "LST" : pending == Pending::firstStep ? "FST"
+                          : pending == Pending::playMode ? juce::String (seq::playModeNames[pattern().playMode()])
+                          : pending == Pending::clear ? "CLR"
                           : pending == Pending::bank ? "BNK" : pending == Pending::chain ? "CHN" : "PAT");
     }
     else if (processor.isRecording() && ! processor.getDisplay().running.load())
@@ -812,6 +938,14 @@ void FrontPanel::updateKeys (double now)
                 state = index == p.last() ? 2 : (inRange ? 1 : 0);
                 break;
 
+            case Pending::firstStep:
+                state = index == p.first() ? 2 : (inRange ? 1 : 0);
+                break;
+
+            case Pending::playMode:
+                state = k >= seq::numPlayModes ? 0 : (k == p.playMode() ? 2 : 1);
+                break;
+
             case Pending::bank:
                 state = k >= Patterns::numBanks ? 0 : (k == patterns.selectedIndex() / Patterns::patternsPerBank ? 2 : 1);
                 break;
@@ -839,7 +973,18 @@ void FrontPanel::updateKeys (double now)
                 break;
 
             case Pending::none:
-                if (keyMode == KeyMode::scale && ! processor.isRecording() && ! keyboard)
+                if (showsLfo (now) && ! processor.isRecording() && ! keyboard && keyMode == KeyMode::steps && selectedStep < 0)
+                {
+                    // the LFO's cycle as a running light
+                    state = k == juce::jlimit (0, numKeys - 1, (int) (processor.getDisplay().lfoPhase.load() * numKeys)) ? 2 : 0;
+                }
+                else if (keyMode == KeyMode::transpose && ! processor.isRecording() && ! keyboard)
+                {
+                    // the transpose key lights; key 1 (no change) glows dimly
+                    const auto lit = processor.getLiveTranspose() - 12 * transposeOctave;
+                    state = k < 13 && k == lit ? 2 : (k == 0 || k == 15 ? 1 : 0);
+                }
+                else if (keyMode == KeyMode::scale && ! processor.isRecording() && ! keyboard)
                 {
                     // the user scale's notes; the picked one blinks
                     const auto user = editedScale();

@@ -46,6 +46,7 @@ namespace sb64::dsp
         float pitchEnvDecay = 0.4f;     // 0..1
         float tuneHz = 0.0f;            // A = 440 Hz + tune
         float volume = 0.7f;            // 0..1
+        float drift = 0.0f;             // 0..1: slow pitch and cutoff wander, a little detune per note
     };
 
     class Voice
@@ -76,6 +77,7 @@ namespace sb64::dsp
         // host sync: the LFO's phase in cycles (0..1)
         void setLfoPhase (float cycle) noexcept { lfo.setPhase (cycle); }
         float getLfoValue() const noexcept { return lfoValue; }
+        float getLfoPhase() const noexcept { return lfo.getPhase(); }
 
         bool isGateOn() const noexcept { return gate; }
         bool isAccent() const noexcept { return accent; }
@@ -141,5 +143,12 @@ namespace sb64::dsp
         Lfo lfo;
         float lfoValue = 0.0f;
         uint32_t noiseSeed = 0x9e3779b9u;
+
+        // analog drift: a slowly wandering value (-1..1) for pitch and one for the cutoff
+        float driftRandom() noexcept;
+        uint32_t driftSeed = 0x1b873593u;
+        float driftPitch = 0.0f, driftCutoff = 0.0f, driftPitchTarget = 0.0f, driftCutoffTarget = 0.0f;
+        float driftCoef = 0.0f, noteDrift = 0.0f;
+        int driftCountdown = 0;
     };
 }

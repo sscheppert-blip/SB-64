@@ -18,6 +18,8 @@ namespace sb64
         chainSize = 0;
         chainPosition = 0;
 
+        const auto changes = index != selectedIndex();
+
         if (whenPlaying && index != current.load())
         {
             queued = index;
@@ -27,6 +29,21 @@ namespace sb64
             queued = -1;
             current = index;
         }
+
+        if (changes)
+            takeSnapshot();
+    }
+
+    void Patterns::takeSnapshot() noexcept
+    {
+        snapshotIndex = selectedIndex();
+        snapshot.copyFrom (selected());
+    }
+
+    void Patterns::reload() noexcept
+    {
+        if (canReload())
+            selected().copyFrom (snapshot);
     }
 
     void Patterns::addToChain (int index) noexcept
@@ -122,6 +139,7 @@ namespace sb64
             child.setProperty ("index", i, nullptr);
             child.setProperty ("first", p.first(), nullptr);
             child.setProperty ("last", p.last(), nullptr);
+            child.setProperty ("mode", p.playMode(), nullptr);
             child.setProperty ("steps", stepsToString (p), nullptr);
             tree.appendChild (child, nullptr);
         }
@@ -140,7 +158,7 @@ namespace sb64
         if (! tree.isValid())
         {
             current = 0;
-            writeDemo (patterns[0]);
+            takeSnapshot();
             return;
         }
 
@@ -158,9 +176,11 @@ namespace sb64
             stepsFromString (p, child.getProperty ("steps").toString());
             p.setLast ((int) child.getProperty ("last", seq::stepsPerBar - 1));
             p.setFirst ((int) child.getProperty ("first", 0));
+            p.setPlayMode ((int) child.getProperty ("mode", 0));
         }
 
         current = juce::jlimit (0, numPatterns - 1, (int) tree.getProperty ("current", 0));
+        takeSnapshot();
     }
 
     void Patterns::writeDemo (seq::Pattern& p)

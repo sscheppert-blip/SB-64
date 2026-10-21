@@ -1,5 +1,6 @@
 #pragma once
 
+#include "NoteListener.h"
 #include "Pattern.h"
 #include "Scales.h"
 #include "Voice.h"
@@ -25,9 +26,10 @@ namespace sb64::seq
     inline constexpr int numPlayModes = 5;
     inline constexpr const char* playModeNames[numPlayModes] { "FWD", "BWD", "RND", "PP", "PP2" };
 
+    static_assert (numPlayModes == Pattern::numModes);
+
     struct PlayOptions
     {
-        PlayMode mode = PlayMode::forward;
         int transpose = 0;           // semitones
         int scale = 0, root = 0;     // notes move down onto the scale
         const UserScales* users = nullptr;
@@ -53,6 +55,7 @@ namespace sb64::seq
         void process (dsp::Voice&, PatternSource&, const Clock&) noexcept;
 
         void setOptions (const PlayOptions& o) noexcept { options = o; }
+        void setListener (NoteListener* l) noexcept { listener = l; }
 
         // lets go of the voice and waits for the next start
         void stop (dsp::Voice&) noexcept;
@@ -83,6 +86,8 @@ namespace sb64::seq
         int position = -1;
         float progress = 0.0f;
         PlayOptions options;
+        NoteListener* listener = nullptr;
+        void ended (dsp::Voice&) noexcept;
 
         // internal clock: step within the pass and passes since the start
         int passStep = -1;

@@ -14,15 +14,17 @@ namespace sb64::menu
     const std::vector<Item>& items()
     {
         static const std::vector<Item> list {
+            { presetItem,        "PRS" },
             { id::tempo,         "BPM" },
             { id::clock,         "CLK" },
             { id::swing,         "SWG" },
-            { id::playMode,      "PLY" },
             { id::transpose,     "TRP" },
             { id::scale,         "SCL" },
             { id::root,          "KEY" },
+            { id::transposeLatch, "TLT" },
             { id::masterSlide,   "MSL" },
             { id::arp,           "ARP" },
+            { id::arpTempo,      "ABP" },
             { id::arpDir,        "ADR" },
             { id::arpOct,        "AOC" },
             { id::arpGate,       "AGT" },
@@ -33,15 +35,16 @@ namespace sb64::menu
             { id::rndSlide,      "RSL" },
             { id::rndOctaves,    "ROC" },
             { id::rndMod,        "RMD" },
+            { id::rndPitchEnv,   "RPE" },
+            { id::rndChance,     "RPR" },
+            { id::rndGateLow,    "RGL" },
+            { id::rndGateHigh,   "RGH" },
             { id::lfoShape,      "LFO" },
             { id::lfoSync,       "SYN" },
             { id::lfoRange,      "RNG" },
             { id::lfoReset,      "RST" },
             { id::lfoPhase,      "PHS" },
-            { id::slideTime,     "SLD" },
             { id::accentVel,     "ACC" },
-            { id::pitchEnvDepth, "PED" },
-            { id::pitchEnvDecay, "PET" },
             { id::bendRange,     "BND" },
             { id::tune,          "TUN" },
             { id::volume,        "VOL" },
@@ -93,9 +96,6 @@ namespace sb64::menu
         if (paramId == id::clock)
             return whole != 0 ? "HST" : "INT";
 
-        if (paramId == id::playMode)
-            return seq::playModeNames[juce::jlimit (0, seq::numPlayModes - 1, whole)];
-
         if (paramId == id::scale)
         {
             const auto scale = juce::jlimit (0, seq::numScales - 1, whole);
@@ -105,26 +105,28 @@ namespace sb64::menu
         if (paramId == id::root)
             return noteName (whole + 12).dropLastCharacters (1);
 
-        if (paramId == id::arp)
+        if (paramId == id::arp || paramId == id::transposeLatch)
             return whole != 0 ? "ON" : "OFF";
 
         if (paramId == id::arpDir)
             return seq::arpDirectionNames[juce::jlimit (0, 3, whole)];
 
         if (paramId == id::arpSource)
-            return whole != 0 ? "SCL" : "KEY";
+            return whole == 2 ? "PAT" : (whole == 1 ? "SCL" : "KEY");
 
         if (paramId == id::transpose)
             return whole > 0 ? "+" + juce::String (whole) : juce::String (whole);
 
-        if (paramId == id::masterSlide)
-            return whole > 0 ? juce::String (whole) : juce::String ("OFF");
+        if (paramId == id::arpTempo)
+            return whole >= 20 ? juce::String (whole) : juce::String ("SEQ");
 
         if (paramId == id::arpOct || paramId == id::arpGate || paramId == id::arpRhythm || paramId == id::rndDensity
-            || paramId == id::rndAccent || paramId == id::rndSlide || paramId == id::rndOctaves || paramId == id::rndMod)
+            || paramId == id::rndAccent || paramId == id::rndSlide || paramId == id::rndOctaves || paramId == id::rndMod
+            || paramId == id::rndPitchEnv || paramId == id::rndChance || paramId == id::rndGateLow || paramId == id::rndGateHigh)
             return juce::String (whole);
 
-        if (paramId == id::tempo || paramId == id::swing || paramId == id::slideTime || paramId == id::accentVel || paramId == id::pitchEnvDepth || paramId == id::bendRange)
+        if (paramId == id::tempo || paramId == id::swing || paramId == id::accentVel || paramId == id::bendRange
+            || paramId == id::masterSlide)
             return juce::String (whole);
 
         if (paramId == id::tune)
@@ -159,13 +161,14 @@ namespace sb64::menu
         const auto value = range.convertFrom0to1 (parameter->getValue());
         float next = value;
 
-        if (paramId == id::slideTime)
-            next = value + (float) steps * (fine ? 1.0f : 5.0f);
-        else if (paramId == id::tune)
+        if (paramId == id::tune)
             next = value + (float) steps * (fine ? 0.1f : 0.5f);
-        else if (paramId == id::masterSlide)
-            next = value <= 0.0f && steps > 0 ? 10.0f : (value <= 10.0f && steps < 0 ? 0.0f : value + (float) steps * (fine ? 1.0f : 5.0f));
-        else if (paramId == id::arpGate || paramId == id::rndDensity || paramId == id::rndAccent || paramId == id::rndSlide)
+        else if (paramId == id::arpTempo)
+            next = value < 20.0f ? (steps > 0 ? 20.0f + (float) (steps - 1) * (fine ? 1.0f : 5.0f) : 0.0f)
+                                 : (value + (float) steps * (fine ? 1.0f : 5.0f) < 20.0f ? 0.0f : value + (float) steps * (fine ? 1.0f : 5.0f));
+        else if (paramId == id::arpGate || paramId == id::rndDensity || paramId == id::rndAccent || paramId == id::rndSlide
+                 || paramId == id::rndPitchEnv || paramId == id::rndChance || paramId == id::rndGateLow || paramId == id::rndGateHigh
+                 || paramId == id::masterSlide)
             next = value + (float) steps * (fine ? 1.0f : 5.0f);
         else if (paramId == id::accentVel)
             next = value + (float) steps * (fine ? 1.0f : 4.0f);

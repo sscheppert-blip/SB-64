@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "FactoryPresets.h"
 #include "Parameters.h"
 #include "dsp/Generator.h"
 #include "dsp/Scales.h"
@@ -36,17 +37,18 @@ SB64AudioProcessor::SB64AudioProcessor()
     refs.wave = raw (id::wave);             refs.filterMode = raw (id::filterMode);
     refs.lfoShape = raw (id::lfoShape);     refs.lfoSync = raw (id::lfoSync);
     refs.lfoRange = raw (id::lfoRange);     refs.lfoReset = raw (id::lfoReset);
-    refs.lfoPhase = raw (id::lfoPhase);     refs.slideTime = raw (id::slideTime);
-    refs.accentVel = raw (id::accentVel);   refs.pitchEnvDepth = raw (id::pitchEnvDepth);
-    refs.pitchEnvDecay = raw (id::pitchEnvDecay);
+    refs.lfoPhase = raw (id::lfoPhase);     refs.accentVel = raw (id::accentVel);
     refs.bendRange = raw (id::bendRange);   refs.tune = raw (id::tune);
     refs.volume = raw (id::volume);
     refs.run = raw (id::run);               refs.tempo = raw (id::tempo);
     refs.clock = raw (id::clock);           refs.swing = raw (id::swing);
-    refs.playMode = raw (id::playMode);     refs.transpose = raw (id::transpose);
+    refs.transpose = raw (id::transpose);
     refs.scale = raw (id::scale);           refs.root = raw (id::root);
     refs.masterSlide = raw (id::masterSlide);
-    refs.arp = raw (id::arp);               refs.arpDir = raw (id::arpDir);
+    refs.transposeLatch = raw (id::transposeLatch);
+    refs.rndPitchEnv = raw (id::rndPitchEnv); refs.rndChance = raw (id::rndChance);
+    refs.rndGateLow = raw (id::rndGateLow);   refs.rndGateHigh = raw (id::rndGateHigh);
+    refs.arp = raw (id::arp);               refs.arpTempo = raw (id::arpTempo);               refs.arpDir = raw (id::arpDir);
     refs.arpOct = raw (id::arpOct);         refs.arpGate = raw (id::arpGate);
     refs.arpRhythm = raw (id::arpRhythm);   refs.arpSource = raw (id::arpSource);
     refs.rndDensity = raw (id::rndDensity); refs.rndAccent = raw (id::rndAccent);
@@ -54,6 +56,8 @@ SB64AudioProcessor::SB64AudioProcessor()
     refs.rndMod = raw (id::rndMod);
 
     heldNotes.reserve (128);
+    sequencer.setListener (this);
+    arp.setListener (this);
 }
 
 void SB64AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -76,6 +80,8 @@ void SB64AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     voice.prepare (sampleRate * oversamplingFactor);
     sequencer.prepare (sampleRate);
     arp.prepare (sampleRate);
+    midiOut.ensureSize (4096);
+    midiOutNote = -1;
     wasRunning = false;
     heldNotes.clear();
     hostWasPlaying = false;
@@ -111,11 +117,10 @@ sb64::dsp::Settings SB64AudioProcessor::readSettings (double bpm) const noexcept
     s.lfoReset = on (refs.lfoReset);
     s.lfoStartPhase = (float) index (refs.lfoPhase, 7) / 8.0f;
 
-    s.slideSeconds = refs.slideTime->load() * 0.001f;
-    s.pitchEnvDepth = index (refs.pitchEnvDepth, 9);
-    s.pitchEnvDecay = refs.pitchEnvDecay->load();
+    s.slideSeconds = (float) (refs.masterSlide->load() * 0.01 * 15.0 / std::max (currentBpm, 1.0));   // a share of a 16th
     s.tuneHz = refs.tune->load();
     s.volume = refs.volume->load();
+    s.drift = analogDrift;
     return s;
 }
 
@@ -124,10 +129,8 @@ void SB64AudioProcessor::playNote (int note, int velocity, bool slide) noexcept
     const auto accent = velocity >= juce::roundToInt (refs.accentVel->load());
     voice.setStepPitchEnvelope (-1, 0.0f);
 
-    // master slide: legato notes glide over this share of a 16th (off: the slide time setting)
-    const auto master = refs.masterSlide->load();
-    const auto glide = master > 0.0f ? (float) (master * 0.01 * 15.0 / currentBpm) : -1.0f;
-    voice.noteOn ((float) note, accent, slide ? sb64::dsp::Transition::slide : sb64::dsp::Transition::retrigger, glide);
+    // legato notes glide over the master slide's share of a 16th
+    voice.noteOn ((float) note, accent, slide ? sb64::dsp::Transition::slide : sb64::dsp::Transition::retrigger);
     display.note = note;
 }
 
@@ -194,6 +197,11 @@ void SB64AudioProcessor::handleMidi (const juce::MidiMessage& message) noexcept
             voice.noteOff();
         else if (wasSounding)
             playNote (heldNotes.back(), 0, true);   // back to the note still held
+    }
+    else if (message.isProgramChange())
+    {
+        // program change picks a pattern: 0..127 = A1..H16 (while playing, at the end of the current one)
+        patterns.select (message.getProgramChangeNumber(), sequencer.isRunning());
     }
     else if (message.isPitchWheel())
     {
@@ -274,8 +282,7 @@ void SB64AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     auto index = [] (const std::atomic<float>* p, int max) { return juce::jlimit (0, max, juce::roundToInt (p->load())); };
 
     sb64::seq::PlayOptions options;
-    options.mode = (sb64::seq::PlayMode) index (refs.playMode, sb64::seq::numPlayModes - 1);
-    options.transpose = juce::roundToInt (refs.transpose->load());
+    options.transpose = juce::roundToInt (refs.transpose->load()) + liveTranspose.load();
     options.scale = index (refs.scale, sb64::seq::numScales - 1);
     options.root = index (refs.root, 11);
     options.users = &userScales;
@@ -288,10 +295,22 @@ void SB64AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     arpSettings.octaves = juce::roundToInt (refs.arpOct->load());
     arpSettings.gate = juce::roundToInt (refs.arpGate->load());
     arpSettings.rhythm = juce::roundToInt (refs.arpRhythm->load()) - 1;
-    arpSettings.scaleSource = refs.arpSource->load() > 0.5f;
+    arpSettings.source = (sb64::seq::ArpSettings::Source) index (refs.arpSource, 2);
+
+    if (arpSettings.source == sb64::seq::ArpSettings::Source::pattern)
+    {
+        const auto& p = patterns.playing();
+        int count = 0;
+        for (int i = p.first(); i <= p.last(); ++i)
+            if (const auto step = p.get (i); step.on)
+                patternNotes[(size_t) count++] = step.note;
+        arpSettings.patternNotes = patternNotes.data();
+        arpSettings.numPatternNotes = count;
+    }
     arpSettings.scale = options.scale;
     arpSettings.users = &userScales;
     const auto recordArp = recording.load();
+    const auto arpBpm = refs.arpTempo->load() >= 20.0f ? (double) refs.arpTempo->load() : clock.bpm;
 
     // the arpeggiator switched off lets go of its note
     if (! arpOn && arp.isPlaying())
@@ -307,16 +326,18 @@ void SB64AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
             handleMidi ((*event).getMessage());
 
         clock.ppq = ppqStart + ppqPerSample * i;
+        midiOutSample = i;
         sequencer.process (voice, patterns, clock);
 
         if (arpOn)
-            if (const auto played = arp.process (voice, arpSettings, clock.bpm, options.transpose); played >= 0 && recordArp)
+            if (const auto played = arp.process (voice, arpSettings, arpBpm, options.transpose); played >= 0 && recordArp)
                 record (played, 0, arpSettings.gate);
 
         voice.render (oversampled + i * oversamplingFactor, oversamplingFactor);
     }
 
-    midi.clear();
+    midi.swapWith (midiOut);
+    midiOut.clear();
 
     // a stopped sequence starts again from its first step
     if (wasRunning && ! sequencer.isRunning())
@@ -351,12 +372,55 @@ void SB64AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     display.gate = voice.isGateOn();
     display.accent = voice.isAccent() && voice.getAmpEnvelope() > 0.05f;
     display.lfoHigh = voice.getLfoValue() > 0.0f;
+    display.lfoPhase = voice.getLfoPhase();
 
     for (int c = 1; c < output.getNumChannels(); ++c)
         output.copyFrom (c, 0, output, 0, 0, numSamples);
 
     for (int c = output.getNumChannels(); c < buffer.getNumChannels(); ++c)
         buffer.clear (c, 0, numSamples);
+}
+
+void SB64AudioProcessor::noteStarted (int note, bool accent) noexcept
+{
+    // the new note first, then the old one ends: slides and ties stay legato on the receiving synth
+    // (the same note again simply starts over)
+    if (midiOutNote == note)
+        midiOut.addEvent (juce::MidiMessage::noteOff (1, note), midiOutSample);
+
+    midiOut.addEvent (juce::MidiMessage::noteOn (1, note, (juce::uint8) (accent ? 127 : 100)), midiOutSample);
+
+    if (midiOutNote >= 0 && midiOutNote != note)
+        midiOut.addEvent (juce::MidiMessage::noteOff (1, midiOutNote), midiOutSample);
+
+    midiOutNote = note;
+}
+
+void SB64AudioProcessor::noteEnded() noexcept
+{
+    if (midiOutNote >= 0)
+        midiOut.addEvent (juce::MidiMessage::noteOff (1, midiOutNote), midiOutSample);
+
+    midiOutNote = -1;
+}
+
+int SB64AudioProcessor::getNumPrograms()
+{
+    return (int) sb64::presets::factory().size();
+}
+
+void SB64AudioProcessor::setCurrentProgram (int index)
+{
+    const auto& list = sb64::presets::factory();
+    index = juce::jlimit (0, (int) list.size() - 1, index);
+    program = index;
+    sb64::presets::apply (state, list[(size_t) index]);
+}
+
+const juce::String SB64AudioProcessor::getProgramName (int index)
+{
+    const auto& list = sb64::presets::factory();
+    return juce::isPositiveAndBelow (index, (int) list.size()) ? juce::String (list[(size_t) index].name) : juce::String();
 }
 
 void SB64AudioProcessor::randomisePattern()
@@ -369,6 +433,10 @@ void SB64AudioProcessor::randomisePattern()
     settings.slide = whole (refs.rndSlide);
     settings.octaves = whole (refs.rndOctaves);
     settings.mod = whole (refs.rndMod);
+    settings.pitchEnv = whole (refs.rndPitchEnv);
+    settings.chance = whole (refs.rndChance);
+    settings.gateLow = whole (refs.rndGateLow);
+    settings.gateHigh = whole (refs.rndGateHigh);
     settings.scale = whole (refs.scale);
     settings.root = whole (refs.root);
     settings.users = &userScales;
@@ -381,6 +449,8 @@ void SB64AudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     auto tree = state.copyState();
     tree.setProperty (editorWidthProperty, editorWidth.load(), nullptr);
+    tree.setProperty ("liveTranspose", liveTranspose.load(), nullptr);
+    tree.setProperty ("program", program.load(), nullptr);
     tree.appendChild (patterns.toTree(), nullptr);
 
     // user scales that differ from chromatic: mask and twelve detunes
@@ -415,6 +485,10 @@ void SB64AudioProcessor::setStateInformation (const void* data, int sizeInBytes)
             auto tree = juce::ValueTree::fromXml (*xml);
             editorWidth = (int) tree.getProperty (editorWidthProperty, 0);
             tree.removeProperty (editorWidthProperty, nullptr);
+            program = juce::jlimit (0, getNumPrograms() - 1, (int) tree.getProperty ("program", 0));
+            tree.removeProperty ("program", nullptr);
+            setLiveTranspose ((int) tree.getProperty ("liveTranspose", 0));
+            tree.removeProperty ("liveTranspose", nullptr);
 
             const auto savedPatterns = tree.getChildWithName ("PATTERNS");
             tree.removeChild (savedPatterns, nullptr);

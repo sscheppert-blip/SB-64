@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(SB64 VERSION 0.1.0 LANGUAGES C CXX)
+project(SB64 VERSION 0.2.0 LANGUAGES C CXX)
 
 option(SB64_BUILD_TESTS "Build the offline tests" ON)
 option(SB64_COPY_PLUGIN "Copy the built plugins into the user's plugin folders" ON)
@@ -39,7 +39,7 @@ juce_add_plugin(SB64
     FORMATS                  AU VST3 Standalone
     IS_SYNTH                 TRUE
     NEEDS_MIDI_INPUT         TRUE
-    NEEDS_MIDI_OUTPUT        FALSE
+    NEEDS_MIDI_OUTPUT        TRUE
     IS_MIDI_EFFECT           FALSE
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
     COPY_PLUGIN_AFTER_BUILD  ${SB64_COPY_PLUGIN}
@@ -53,6 +53,7 @@ set(SB64_SOURCES
     Source/dsp/Sequencer.cpp
     Source/dsp/Arp.cpp
     Source/dsp/Generator.cpp
+    Source/FactoryPresets.cpp
     Source/Menu.cpp
     Source/Patterns.cpp
     Source/Parameters.cpp

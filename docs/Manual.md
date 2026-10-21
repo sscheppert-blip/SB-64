@@ -91,14 +91,15 @@ Only do this for sources you trust.
 
 ## 3. First steps
 
-1. Put SB-64 on an instrument track.
-2. Press **PLAY** (the triangle). The first pattern **A1** holds a short acid line.
+1. Put SB-64 on an instrument track. Like the hardware it starts with empty patterns.
+2. Click a few step keys: each step comes on (C3, 10 % gate) and blinks. **BACK/NOTE** turns its note,
+   **SELECT/GATE** its length. Another click on the same step switches it off. Quicker: **SHIFT + RND
+   PATT** rolls a whole pattern.
+3. Press **PLAY** (the triangle).
    - In a plugin the clock defaults to **host**: PLAY blinks until the DAW runs. The standalone app
      plays right away at its own tempo.
-3. Turn **CUTOFF**, **RESONANCE**, **VCF ENV** and **ENV/CV LVL** – that's the acid core.
-4. Slowly bring up **DRIVE**. Then **DETUNE**.
-5. Click a step key: the step comes on and blinks. **BACK/NOTE** turns its note, **SELECT/GATE** its
-   length. Another click on the same step switches it off.
+4. Turn **CUTOFF**, **RESONANCE**, **VCF ENV** and **ENV/CV LVL** – that's the acid core.
+5. Slowly bring up **DRIVE**. Then **DETUNE**. Or load a factory sound from `PRS` in the menu.
 
 Mouse helpers:
 
@@ -125,6 +126,8 @@ Noise ────────────────────────�
   on or off, not an amount.
 - **Slide** glides to the next note while the envelopes keep running. **Gate 100 %** joins two notes
   without a new attack (legato), but without gliding.
+- Like real analog gear SB-64 **drifts** a little: pitch and filter wander slightly, every note lands a
+  few cents off.
 - The **pitch envelope** jumps up at the start of the note (up to three octaves) and falls back fast –
   the classic "peow".
 
@@ -143,18 +146,18 @@ Noise ────────────────────────�
 | **Filter switch** | **BP** (band-pass) / **LP** (low-pass). |
 | **VCF ENV** | Filter envelope decay, 30 ms to 3 s. |
 | **RESONANCE** | Filter resonance up to self-oscillation. |
-| **CUTOFF** | Filter frequency, about 30 Hz to 17.6 kHz. |
+| **CUTOFF** | Filter frequency, about 30 Hz to 17.6 kHz. As on the hardware, the bottom fifth (below 9 o'clock) barely does anything. |
 
 ### Bottom row
 
 | Control | What it does |
 |---|---|
 | **FM LVL** | How much the LFO modulates the pitch. |
-| **SUB LVL** | Level of the sub oscillator (square one octave down). |
+| **SUB LVL** | Level of the sub oscillator (square one octave down). Like the transistor original it gets weaker on the lowest notes. |
 | **NOISE LVL** | White noise into the filter. |
 | **SELECT/GATE** | Encoder: with a step selected, its gate (or probability/cents, see below); otherwise it scrolls the menu. |
 | **BACK/NOTE** | Encoder: note of the selected step, otherwise the value of the menu item. **Click = BACK**. |
-| **LFO RATE** | LFO speed, free 0.05 Hz to 2 kHz – or in note values with SYN on. |
+| **LFO RATE** | LFO speed, free 0.05 Hz to 2 kHz – or in note values with SYN on. While you turn it (and in the LFO menu items) the step keys show the LFO as a running light. |
 | **LFO LVL** | How much the LFO modulates the filter. |
 | **ENV/CV LVL** | How far the filter envelope opens the cutoff. |
 
@@ -184,11 +187,26 @@ Everything without its own knob lives in the menu. Turn **SELECT/GATE** (with no
 scroll; the display shows the name for a moment (e.g. `SWG`), then the value. **BACK/NOTE** changes the
 value. The menu closes after five seconds without input; a click on BACK/NOTE closes it at once.
 
-Order: `BPM CLK SWG PLY TRP SCL KEY MSL ARP ADR AOC AGT ARH ASR DNS RAC RSL ROC RMD LFO SYN RNG RST PHS
-SLD ACC PED PET BND TUN VOL`. What each one does: [parameter list](#14-parameter-list).
+Order: `PRS BPM CLK SWG TRP SCL KEY TLT MSL ARP ABP ADR AOC AGT ARH ASR DNS RAC RSL ROC RMD RPE RPR RGL RGH
+LFO SYN RNG RST PHS ACC BND TUN VOL`. What each one does: [parameter list](#14-parameter-list).
 
-Many SHIFT functions jump straight to the right item (SHIFT + LFO → `LFO`, SHIFT + PLAY MODE → `PLY`
-and so on).
+Some SHIFT functions jump straight to the right item (SHIFT + LFO → `LFO`, SHIFT + SCALE → `SCL`).
+
+### Factory sounds (PRS)
+
+The first menu item `PRS` loads one of 16 factory sounds – the sound knobs only; patterns and tempo
+stay. In a DAW they're also listed as programs.
+
+| Code | Sound | | Code | Sound |
+|---|---|---|---|---|
+| `INI` | Init | | `PLK` | Pluck – short and percussive |
+| `ACD` | Classic Acid | | `HAT` | Noise Hat – noise instead of a note |
+| `SQR` | Square Squelch | | `DRN` | Drone – never ends |
+| `RUB` | Rubber Bass – triangle + sub | | `WOB` | Wobble – synced LFO on the filter |
+| `SWM` | Swarm – detune swarm | | `STP` | Stepper – stepped LFO per note |
+| `DRV` | Overdrive | | `SUB` | Deep Sub |
+| `BPZ` | Band Zap – band-pass | | `SHR` | Random Steps – S&H on the filter |
+| `MTL` | Metal FM – audio-rate FM | | `WHS` | Whistle – band-pass whistle |
 
 ---
 
@@ -206,6 +224,17 @@ The 16 step keys show one bar of the selected pattern. Lit = the step plays, bri
 - **Click the selected step again:** switches it off.
 - **BACK** leaves the step.
 
+### Transposing
+
+Transpose live like on the hardware:
+
+- **SHIFT + TRANSP** switches the keys to transpose mode (display `T+0`). Key 1 = no change, key 2 =
+  +1 semitone … key 13 = +12. **±1 OCT** adds or removes an octave (`O-1`). **Key 16** resets. BACK or
+  SHIFT + TRANSP again ends the mode.
+- **Latch** (`TLT`, on by default): the transpose stays. With `TLT OFF` it only lasts while the key is
+  held – for quick pushes.
+- `TRP` in the menu is a fixed extra offset (±24), e.g. for a whole song.
+
 ### Probability (PRB)
 
 | Value | Meaning |
@@ -217,8 +246,10 @@ The 16 step keys show one bar of the selected pattern. Lit = the step plays, bri
 ### Length, direction, tempo
 
 - **SHIFT + LAST STEP**, then a step key: the pattern's last step (works in bars 2–4 too).
-- **SHIFT + PLAY MODE**: direction `FWD` forward, `BWD` backward, `RND` random, `PP` ping-pong (ends
-  once), `PP2` ping-pong with doubled ends.
+  **SHIFT + LAST STEP twice** (display `FST`), then a key: the **first** step – e.g. a pattern that
+  plays only steps 5–12.
+- **SHIFT + PLAY MODE**, then key 1–5: this pattern's direction – `FWD` forward, `BWD` backward, `RND`
+  random, `PP` ping-pong (ends once), `PP2` ping-pong with doubled ends. Every pattern keeps its own.
 - Tempo `BPM` 20–480 (own clock), `SWG` swing 0–50 % on every second 16th.
 
 ### Recording (REC)
@@ -235,7 +266,7 @@ clicking = accent. Notes from a MIDI keyboard work the same way.
 
 **SHIFT + REC** turns the step keys into a keyboard without recording (`KBD`). SHIFT + REC again or
 BACK ends it. Playing legato (hold a key, press the next) glides; how long is set by **MSL** (master
-slide) in the menu: `OFF` = slide time `SLD`, 10–100 = share of a 16th at the tempo.
+slide) in the menu: 10–100 % of a 16th at the tempo. The same goes for MIDI notes.
 
 ---
 
@@ -245,11 +276,11 @@ slide) in the menu: `OFF` = slide time `SLD`, 10–100 = share of a 16th at the 
 |---|---|
 | 1 **ACC** | Keys set/clear accents. BACK ends it. |
 | 2 **SLIDE** | Keys set/clear slides. |
-| 3 **MOD** | A key selects a step, **NOTE** sets its cutoff offset −64…+63 (SELECT in coarse steps). Steps with an offset light up. |
-| 4 **PITCH ENV** | A key selects a step, **NOTE** = depth 1–9 (`PE5`), **SELECT** = decay 0–9 (`DC4`). Depth off = the menu's pitch envelope (`PED`/`PET`). |
-| 5 **LAST STEP** | Then a step key: the last step. |
-| 6 **PLAY MODE** | Opens `PLY`. |
-| 7 **TRANSP** | Opens `TRP`: transposes the sequencer (±24 semitones) and the arp. |
+| 3 **MOD** | A key selects a step, **NOTE** sets its cutoff offset −64…+63 (SELECT in coarse steps). Steps with an offset light up. **Live:** while the sequencer runs and no step is selected, turning NOTE/SELECT writes straight into the playing steps – just turn in your filter moves. |
+| 4 **PITCH ENV** | A key selects a step, **NOTE** = depth 1–9 (`PE5`), **SELECT** = decay 0–9 (`DC4`). Depth 0 = no pitch envelope. |
+| 5 **LAST STEP** | Then a step key: the last step. Twice: the first step. |
+| 6 **PLAY MODE** | Then key 1–5: FWD, BWD, RND, PP, PP2 for this pattern. |
+| 7 **TRANSP** | Transpose mode: keys 1–13 transpose by 0…+12 semitones, ±1 OCT shifts by octaves, key 16 = back to 0. More under [Transposing](#transposing). |
 | 8 **SCALE** | Factory scale: opens `SCL`. User scale: scale editor (see below). |
 | 9 **ARPEGG** | Arpeggiator on/off. |
 | 10 **LFO** | Opens the LFO settings (`LFO`, then scroll on). |
@@ -295,11 +326,12 @@ User scales are saved with the project.
 
 | Menu | Values |
 |---|---|
+| `ABP` tempo | `SEQ` = sequencer tempo, else its own tempo 20–480 BPM |
 | `ADR` direction | `UP`, `DN`, `UD` (up and down), `RND` |
 | `AOC` octaves | 1–3 |
 | `AGT` gate | 10–100 % |
 | `ARH` rhythm | 1 every 16th · 2 eighths · 3 two on, one off · 4 3+3+2 · 5 three on, one off · 6 one off, three on |
-| `ASR` source | `KEY` the held notes · `SCL` the selected scale from the lowest held note |
+| `ASR` source | `KEY` the held notes · `SCL` the selected scale from the lowest held note · `PAT` the notes of the playing pattern in step order, moved by the lowest held key (C3 = as written) |
 
 `TRP` transposes the arp too. With **REC** its notes go into the pattern.
 
@@ -310,6 +342,9 @@ User scales are saved with the project.
 - 8 banks (A–H) × 16 patterns = 128 patterns, all **saved with the project**.
 - **SHIFT + BANK**, key 1–8 changes the bank (same pattern number).
   **SHIFT + PATTERN**, key 1–16 changes the pattern. Lit keys = patterns with content.
+- **Reload (undo):** SHIFT + PATTERN and the key of the pattern that's *already selected* (display
+  `RLD`) brings it back as it was when you picked it (or when the project was loaded) – throwing away
+  all changes, an RND PATT included.
 - While the sequencer runs, the new pattern waits for the end of the playing one (its key blinks).
 - **Chain:** after SHIFT + PATTERN and the first key, press more keys within 2.5 seconds (display `CHN`,
   `C2`, `C3` …). The patterns then play one after the other, round and round. A normal pattern change
@@ -328,15 +363,23 @@ SHIFT + RND PATT refills the steps between the first and last step – with note
 | `RSL` | share with slide |
 | `ROC` | note range 1–3 octaves |
 | `RMD` | random cutoff offset up to ± this value (0 = off) |
+| `RPE` | share with a random pitch envelope |
+| `RPR` | share with a random probability / condition |
+| `RGL` / `RGH` | gate range: shortest and longest gate |
 
-Tip: like a pattern? **COPY** it first – then keep rolling and go back.
+Don't like the result: **reload** (SHIFT + PATTERN, the current pattern's key) brings the old one back.
+Like an in-between result? **COPY** it first.
 
 ---
 
 ## 12. MIDI and host sync
 
-- **MIDI notes** play SB-64 directly: mono, last note wins, legato glides. Velocity from `ACC` (default
-  100) = accent. **Pitch bend** with range `BND`.
+- **MIDI notes** play SB-64 directly: mono, last note wins, legato glides (time: `MSL`). Velocity from
+  `ACC` (default 100) = accent. **Pitch bend** with range `BND`.
+- **Program change** 0–127 picks a pattern (A1 … H16) – while running, at the end of the current one.
+- **MIDI out:** the sequencer and the arp send their notes as MIDI (channel 1, accent = velocity 127,
+  slides overlapping). So SB-64 can drive other instruments – in the DAW, add a MIDI track with SB-64
+  as its input. (Some hosts, e.g. Logic, don't take MIDI from instruments.)
 - **Clock** `CLK`: `INT` = own tempo `BPM`; `HST` = follows the DAW's tempo and position (loops and
   locating included). With HST, PLAY waits until the DAW runs.
 - With `SYN` on the **LFO** runs in time: `RNG LO` 1/64 to 8 cycles per quarter, `RNG HI` 1/16 to 32.
@@ -371,6 +414,12 @@ Tip: like a pattern? **COPY** it first – then keep rolling and go back.
     cents. Suddenly acid sounds like somewhere else.
 14. **MOD track as filter accent.** SHIFT + MOD and +30…+60 on the offbeats – like a second accent just
     for the filter.
+15. **Turn in a filter move live.** Sequencer running, SHIFT + MOD, then slowly turn NOTE – the move lands
+    step by step in the MOD track and plays by itself from the next pass on.
+16. **Flip through the sounds.** Let a pattern run, menu on `PRS`, and use NOTE to hear all 16 factory
+    sounds – then tweak from there.
+17. **Push it live.** Let a pattern run, SHIFT + TRANSP, `TLT OFF` – now briefly hold keys 1, 6, 8 like
+    in a club-track breakdown.
 
 ---
 
@@ -392,32 +441,33 @@ Tip: like a pattern? **COPY** it first – then keep rolling and go back.
 
 | Display | Parameter | Range |
 |---|---|---|
+| `PRS` | factory sound | INI … WHS |
 | `BPM` | tempo | 20–480 |
 | `CLK` | clock | INT / HST |
 | `SWG` | swing | 0–50 % |
-| `PLY` | play mode | FWD, BWD, RND, PP, PP2 |
-| `TRP` | transpose | ±24 semitones |
+| `TRP` | transpose (fixed) | ±24 semitones |
+| `TLT` | transpose latch | ON / OFF |
 | `SCL` | scale | CHR … BMI, U1–U16 |
 | `KEY` | root | C – B |
-| `MSL` | master slide | OFF, 10–100 % of a 16th |
+| `MSL` | master slide (keyboard/MIDI legato) | 10–100 % of a 16th |
 | `ARP` | arpeggiator | ON / OFF |
+| `ABP` | arp tempo | SEQ, 20–480 |
 | `ADR` | arp direction | UP, DN, UD, RND |
 | `AOC` | arp octaves | 1–3 |
 | `AGT` | arp gate | 10–100 % |
 | `ARH` | arp rhythm | 1–6 |
-| `ASR` | arp source | KEY / SCL |
+| `ASR` | arp source | KEY / SCL / PAT |
 | `DNS` `RAC` `RSL` | random: density, accents, slides | % |
 | `ROC` | random: octaves | 1–3 |
-| `RMD` | random: cutoff offset | 0–64 |
+| `RMD` | random: cutoff offset | 0–50 |
+| `RPE` `RPR` | random: pitch envelopes, probabilities | % |
+| `RGL` `RGH` | random: gate range | 10–100 % |
 | `LFO` | LFO shape | SIN, TRI, SAW, RMP, SQR, TDS, DST, TAR, S-H, NOS |
 | `SYN` | LFO sync | ON / OFF |
 | `RNG` | LFO range (synced) | LO / HI |
 | `RST` | LFO restart per note | ON / OFF |
 | `PHS` | LFO start phase | 0–315° |
-| `SLD` | slide time (MIDI) | 10–500 ms |
 | `ACC` | accent from velocity | 1–127 |
-| `PED` | pitch envelope depth (MIDI / steps without their own) | 0–9 |
-| `PET` | pitch envelope decay | 10–300 ms |
 | `BND` | pitch bend range | 0–12 semitones |
 | `TUN` | tuning | ±10 Hz around 440 Hz |
 | `VOL` | volume | 0–100 |

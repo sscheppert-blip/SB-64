@@ -30,10 +30,7 @@ namespace sb64::params
         inline constexpr const char* lfoRange      = "lfoRange";
         inline constexpr const char* lfoReset      = "lfoReset";
         inline constexpr const char* lfoPhase      = "lfoPhase";
-        inline constexpr const char* slideTime     = "slideTime";
         inline constexpr const char* accentVel     = "accentVelocity";
-        inline constexpr const char* pitchEnvDepth = "pitchEnvDepth";
-        inline constexpr const char* pitchEnvDecay = "pitchEnvDecay";
         inline constexpr const char* bendRange     = "bendRange";
         inline constexpr const char* tune          = "tune";
         inline constexpr const char* volume        = "volume";
@@ -43,14 +40,15 @@ namespace sb64::params
         inline constexpr const char* tempo = "tempo";
         inline constexpr const char* clock = "clock";
         inline constexpr const char* swing = "swing";
-        inline constexpr const char* playMode  = "playMode";
         inline constexpr const char* transpose = "transpose";
         inline constexpr const char* scale     = "scale";
         inline constexpr const char* root      = "root";
         inline constexpr const char* masterSlide = "masterSlide";
+        inline constexpr const char* transposeLatch = "transposeLatch";
 
         // arpeggiator
         inline constexpr const char* arp       = "arp";
+        inline constexpr const char* arpTempo  = "arpTempo";
         inline constexpr const char* arpDir    = "arpDirection";
         inline constexpr const char* arpOct    = "arpOctaves";
         inline constexpr const char* arpGate   = "arpGate";
@@ -63,6 +61,10 @@ namespace sb64::params
         inline constexpr const char* rndSlide   = "rndSlide";
         inline constexpr const char* rndOctaves = "rndOctaves";
         inline constexpr const char* rndMod     = "rndMod";
+        inline constexpr const char* rndPitchEnv = "rndPitchEnv";
+        inline constexpr const char* rndChance  = "rndChance";
+        inline constexpr const char* rndGateLow = "rndGateLow";
+        inline constexpr const char* rndGateHigh = "rndGateHigh";
     }
 
     // clock choices

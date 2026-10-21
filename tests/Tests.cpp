@@ -186,7 +186,7 @@ static void testEnvelopes()
     // filter envelope: brighter at the start than later
     s = dsp::Settings {};
     s.vcaEnv = 1.0f;
-    s.cutoff = 0.2f;
+    s.cutoff = 0.32f;
     s.envAmount = 1.0f;
     s.resonance = 0.0f;
     s.vcfEnv = 0.5f;
@@ -413,7 +413,8 @@ static void testMenu()
     check (sb64::menu::noteName (36) == "C2" && sb64::menu::noteName (61) == "C#4", "note names");
 
     for (const auto& item : sb64::menu::items())
-        check (state.getParameter (item.paramId) != nullptr && juce::String (item.name).length() == 3, item.name);
+        check ((state.getParameter (item.paramId) != nullptr || juce::String (item.paramId) == sb64::menu::presetItem)
+               && juce::String (item.name).length() == 3, item.name);
 }
 
 static void testEditor()
@@ -659,7 +660,7 @@ static void testSequencer()
         other.setStateInformation (saved.getData(), (int) saved.getSize());
         auto& q = other.getPatterns().pattern (2 * 16 + 4);
         check (q.get (33) == s && q.last() == 47 && other.getPatterns().selectedIndex() == 2 * 16 + 4, "patterns save and load");
-        check (! other.getPatterns().pattern (0).isEmpty(), "the demo pattern stays");
+        check (SB64AudioProcessor().getPatterns().pattern (0).isEmpty(), "a new instance starts with empty patterns, as the hardware");
         check (sb64::Patterns::name (2 * 16 + 4) == "C5" && sb64::Patterns::name (127) == "H16", "pattern names");
     }
 }
@@ -678,7 +679,7 @@ static void testPanelSequencing()
     panel.turnNote (2);
     check (p.get (3).note == 50 && panel.getDisplayText() == "D3", "NOTE sets the selected step's note");
     panel.turnSelect (2);
-    check (p.get (3).gate == 60, "GATE sets its gate");
+    check (p.get (3).gate == 20, "GATE sets its gate (a new step starts at 10 %)");
     panel.octave (1);
     check (p.get (3).note == 62, "+1 OCT moves the step up an octave");
     panel.pressKey (3);
@@ -854,7 +855,7 @@ static void testStepTracks()
         a.direction = seq::ArpDirection::upDown;
         check (seq::Arp::sequence ({ 48, 52, 55, 59 }, a) == std::vector<int> { 48, 52, 55, 59, 55, 52 }, "arp up & down");
         a.direction = seq::ArpDirection::down;
-        a.scaleSource = true;
+        a.source = seq::ArpSettings::Source::scale;
         a.scale = 3;
         check (seq::Arp::sequence ({ 50 }, a) == std::vector<int> { 59, 57, 54, 52, 50 }, "arp source SCL plays the scale from the key");
     }
@@ -868,7 +869,7 @@ static void testPhase3Sequencing()
         for (int i = 0; i < 4; ++i)
             rig.setStep (i, 45);
         rig.pattern().setLast (3);
-        setParam (rig.processor, id::playMode, 1.0f);
+        rig.pattern().setPlayMode (1);
         setParam (rig.processor, id::run, 1.0f);
         juce::String steps;
         for (int i = 0; i < 6; ++i)
@@ -965,9 +966,15 @@ static void testPhase3Sequencing()
 
         panel.setShift (true);
         panel.pressKey (5);   // PLAY MODE
-        panel.turnNote (3);
-        check (sb64::menu::valueText (processor.getState(), id::playMode) == "PP", "SHIFT + PLAY MODE opens the play mode");
-        panel.back();
+        panel.pressKey (3);
+        check (p.playMode() == 3 && panel.getDisplayText() == "PP", "SHIFT + PLAY MODE, then a key: the pattern's play mode");
+
+        panel.setShift (true);
+        panel.pressKey (4);   // LAST STEP
+        panel.setShift (true);
+        panel.pressKey (4);   // again: FIRST STEP
+        panel.pressKey (2);
+        check (p.first() == 2, "SHIFT + LAST STEP twice, then a key: the first step");
 
         panel.setShift (true);
         panel.pressKey (8);   // ARPEGG
@@ -1061,6 +1068,222 @@ static void testUserScalesAndKeyboard()
     }
 }
 
+
+static void testVersion02()
+{
+    {
+        // play mode and first step are saved with the pattern
+        SB64AudioProcessor processor;
+        auto& p = processor.getPatterns().pattern (5);
+        p.setLast (11);
+        p.setFirst (4);
+        p.setPlayMode (4);
+        juce::MemoryBlock block;
+        processor.getStateInformation (block);
+        SB64AudioProcessor other;
+        other.setStateInformation (block.getData(), (int) block.getSize());
+        const auto& q = other.getPatterns().pattern (5);
+        check (q.playMode() == 4 && q.first() == 4 && q.last() == 11, "play mode and first step are saved per pattern");
+    }
+
+    {
+        // MOD live: turning NOTE in MOD mode while the sequence runs writes into the playing step
+        SeqRig rig;
+        for (int i = 0; i < 16; ++i)
+            rig.setStep (i, 45);
+        std::unique_ptr<juce::AudioProcessorEditor> editor (rig.processor.createEditor());
+        auto& panel = dynamic_cast<SB64AudioProcessorEditor&> (*editor).getPanel();
+        setParam (rig.processor, id::run, 1.0f);
+        rig.run (60 * 2 + 10);
+        panel.setShift (true);
+        panel.pressKey (2);   // MOD
+        panel.turnNote (7);
+        check (rig.pattern().get (2).mod == 7 && rig.pattern().get (1).mod == 0, "MOD live writes into the playing step");
+    }
+
+    {
+        // the arpeggiator on its own tempo
+        SeqRig rig;
+        setParam (rig.processor, id::arp, 1.0f);
+        setParam (rig.processor, id::arpTempo, 60.0f);   // a 16th = 12000 samples = 120 blocks
+        juce::MidiBuffer midi;
+        midi.addEvent (juce::MidiMessage::noteOn (1, 48, (juce::uint8) 90), 0);
+        const auto gates = rig.run (240, midi);
+        check (gates[10] && gates[50] && ! gates[70] && gates[130], "ABP gives the arpeggiator its own tempo");
+        check (sb64::menu::valueText (rig.processor.getState(), id::arpTempo) == "60", "ABP shows the tempo");
+        setParam (rig.processor, id::arpTempo, 0.0f);
+        check (sb64::menu::valueText (rig.processor.getState(), id::arpTempo) == "SEQ", "ABP 0 follows the sequencer");
+    }
+
+    {
+        // factory sounds
+        SB64AudioProcessor processor;
+        check (processor.getNumPrograms() == 16 && processor.getProgramName (1) == "Classic Acid", "16 factory sounds as programs");
+        setParam (processor, id::detune, 0.9f);
+        setParam (processor, id::tempo, 133.0f);
+        processor.setCurrentProgram (1);
+        auto value = [&processor] (const char* paramId) { return processor.getState().getRawParameterValue (paramId)->load(); };
+        check (std::abs (value (id::resonance) - 0.75f) < 1.0e-4f && value (id::detune) == 0.0f && value (id::tempo) == 133.0f,
+               "a factory sound sets the sound, resets the rest of it and leaves the sequencer alone");
+
+        bool loud = true, finite = true;
+        for (int i = 0; i < processor.getNumPrograms(); ++i)
+        {
+            SeqRig rig;
+            rig.processor.setCurrentProgram (i);
+            setParam (rig.processor, id::run, 1.0f);
+            sb64::Patterns::writeDemo (rig.processor.getPatterns().pattern (1));
+            rig.processor.getPatterns().select (1, false);
+            float peakLevel = 0.0f;
+            for (int b = 0; b < 480; ++b)
+            {
+                rig.run (1);
+                peakLevel = std::max (peakLevel, rig.buffer.getMagnitude (0, 0, 100));
+                finite = finite && std::isfinite (rig.buffer.getSample (0, 50));
+            }
+            loud = loud && peakLevel > 0.02f && peakLevel < 1.5f;
+            if (peakLevel <= 0.02f || peakLevel >= 1.5f)
+                std::printf ("      %s peak %.3f\n", processor.getProgramName (i).toRawUTF8(), peakLevel);
+        }
+        check (loud && finite, "every factory sound plays the patterns at a sensible level");
+    }
+}
+
+
+static void testTransposeReloadDrift()
+{
+    {
+        // SHIFT + TRANSP: the keys transpose the sequence; with latch off only while held
+        SB64AudioProcessor processor;
+        std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditor());
+        auto& panel = dynamic_cast<SB64AudioProcessorEditor&> (*editor).getPanel();
+        panel.setShift (true);
+        panel.pressKey (6);   // TRANSP
+        panel.pressKey (5);
+        panel.releaseKey (5);
+        check (processor.getLiveTranspose() == 5 && panel.getDisplayText() == "T+5", "TRANSP mode: a key transposes (latched)");
+        panel.octave (-1);
+        panel.pressKey (3);
+        check (processor.getLiveTranspose() == -9, "-1 OCT moves the transpose keys down an octave");
+        panel.releaseKey (3);
+        setParam (processor, id::transposeLatch, 0.0f);
+        panel.pressKey (7);
+        const auto held = processor.getLiveTranspose();
+        panel.releaseKey (7);
+        check (held == -5 && processor.getLiveTranspose() == 0, "without latch the transpose lasts while the key is held");
+        panel.pressKey (15);
+        check (processor.getLiveTranspose() == 0, "key 16 goes back to no transpose");
+    }
+
+    {
+        // RELOAD: SHIFT + PATTERN and the pattern's own key undo the changes since it was picked
+        SB64AudioProcessor processor;
+        std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditor());
+        auto& panel = dynamic_cast<SB64AudioProcessorEditor&> (*editor).getPanel();
+        auto& patterns = processor.getPatterns();
+        patterns.select (3, false);
+        const auto before = patterns.selected().get (0);
+        processor.randomisePattern();
+        panel.setShift (true);
+        panel.pressKey (15);   // PATTERN
+        panel.pressKey (3);    // A4, already selected
+        check (patterns.selected().get (0) == before && patterns.selectedIndex() == 3 && panel.getDisplayText() == "RLD",
+               "reloading the selected pattern undoes RND PATT");
+    }
+
+    {
+        // random generator extras
+        seq::Pattern p;
+        p.setLast (63);
+        seq::RandomSettings r;
+        r.density = 90; r.pitchEnv = 100; r.chance = 100; r.gateLow = 40; r.gateHigh = 60;
+        seq::randomise (p, r, 99);
+        bool all = true;
+        for (int i = 0; i < seq::maxSteps; ++i)
+        {
+            const auto step = p.get (i);
+            if (step.on)
+                all = all && step.pitchDepth > 0 && step.chance > 0 && step.gate >= 40 && step.gate <= 60;
+        }
+        check (all, "RND PATT: pitch envelopes, chances and the gate range");
+    }
+
+    {
+        // drift: off = exact pitch; full = only a few cents away
+        auto s = openSettings (dsp::Wave::saw);
+        const auto exact = frequencyOf (renderNote (s, 1.0), (size_t) (0.2 * testRate), (size_t) testRate);
+        s.drift = 1.0f;
+        const auto drifted = frequencyOf (renderNote (s, 1.0), (size_t) (0.2 * testRate), (size_t) testRate);
+        const auto cents = 1200.0 * std::log2 (drifted / 110.0);
+        check (std::abs (exact - 110.0) < 0.2, "no drift: exact pitch");
+        check (std::abs (cents) > 0.05 && std::abs (cents) < 12.0, "full drift: a few cents off");
+    }
+}
+
+
+static void testHardwareFeatures()
+{
+    // a new step: C3 at 10 %
+    check (seq::Step {}.note == 48 && seq::Step {}.gate == 10, "a new step is C3 with 10 % gate, as on the hardware");
+
+    // cutoff: the bottom fifth of the knob barely moves
+    check (dsp::cutoffHz (0.2f) < 46.0f && dsp::cutoffHz (0.0f) > 29.0f && dsp::cutoffHz (1.0f) > 17000.0f,
+           "CUTOFF does little below 9 o'clock");
+
+    {
+        // the sub gets weaker on the lowest notes
+        auto subShare = [] (float note)
+        {
+            auto s = openSettings (dsp::Wave::triangle);
+            const auto plain = renderNote (s, 0.5, note);
+            s.subLevel = 1.0f;
+            const auto withSub = renderNote (s, 0.5, note);
+            return rms (withSub, (size_t) (0.2 * testRate), withSub.size()) / rms (plain, (size_t) (0.2 * testRate), plain.size());
+        };
+        check (subShare (14.0f) < 0.85 * subShare (48.0f), "the sub is weaker on the lowest notes");
+    }
+
+    {
+        // program change picks a pattern
+        SeqRig rig;
+        juce::MidiBuffer midi;
+        midi.addEvent (juce::MidiMessage::programChange (1, 37), 0);
+        rig.run (1, midi);
+        check (rig.processor.getPatterns().selectedIndex() == 37, "MIDI program change selects a pattern (37 = C6)");
+    }
+
+    {
+        // MIDI out: the sequencer's notes, accent as velocity 127, a slide overlaps the next note
+        SeqRig rig;
+        rig.setStep (0, 45, 50, true, true);
+        rig.setStep (1, 50, 50);
+        setParam (rig.processor, id::run, 1.0f);
+        std::vector<juce::MidiMessage> out;
+        for (int b = 0; b < 120; ++b)
+        {
+            juce::MidiBuffer midi;
+            rig.buffer.clear();
+            rig.processor.processBlock (rig.buffer, midi);
+            for (const auto m : midi)
+                out.push_back (m.getMessage());
+        }
+        const auto ok = out.size() == 4 && out[0].isNoteOn() && out[0].getNoteNumber() == 45 && out[0].getVelocity() == 127
+                     && out[1].isNoteOn() && out[1].getNoteNumber() == 50 && out[2].isNoteOff() && out[2].getNoteNumber() == 45
+                     && out[3].isNoteOff() && out[3].getNoteNumber() == 50;
+        check (ok, "MIDI out sends the sequencer's notes, slides overlapping");
+    }
+
+    {
+        // arp source PAT: the pattern's notes in step order, moved by the key (relative to C3)
+        seq::ArpSettings a;
+        a.source = seq::ArpSettings::Source::pattern;
+        const int notes[] { 48, 55, 51, 60 };
+        a.patternNotes = notes;
+        a.numPatternNotes = 4;
+        check (seq::Arp::sequence ({ 50 }, a) == std::vector<int> { 50, 57, 53, 62 }, "arp source PAT plays the pattern's notes");
+    }
+}
+
 static bool renderToFile (const juce::String& path, const juce::StringArray& options)
 {
     constexpr int sampleRate = 48000, block = 480;
@@ -1082,7 +1305,10 @@ static bool renderToFile (const juce::String& path, const juce::StringArray& opt
         else if (key == "note")
             heldNote = value.getIntValue();
         else if (option == "seq")
+        {
             useSequencer = true;
+            sb64::Patterns::writeDemo (processor.getPatterns().selected());
+        }
         else if (processor.getState().getParameter (key) != nullptr)
             setParam (processor, key, value.getFloatValue());
         else
@@ -1185,6 +1411,35 @@ static int writePng (const juce::Image& image, const char* path)
     return ok ? 0 : 1;
 }
 
+
+// Harmonic levels of a held C3 through the open filter, in dB relative to the fundamental.
+static int harmonics (int wave)
+{
+    auto s = openSettings ((dsp::Wave) juce::jlimit (0, 2, wave));
+    s.cutoff = 1.0f;
+    const auto out = renderNote (s, 1.0, 48.0f);
+    const auto f0 = 440.0 * std::pow (2.0, (48 - 69) / 12.0);
+    const auto from = (size_t) (0.5 * testRate), length = (size_t) (0.4 * testRate);
+
+    auto level = [&] (int h)
+    {
+        double re = 0.0, im = 0.0;
+        for (size_t i = 0; i < length; ++i)
+        {
+            const auto w = 0.5 - 0.5 * std::cos (2.0 * juce::MathConstants<double>::pi * (double) i / (double) length);
+            const auto phase = 2.0 * juce::MathConstants<double>::pi * f0 * h * (double) i / testRate;
+            re += w * out[from + i] * std::cos (phase);
+            im += w * out[from + i] * std::sin (phase);
+        }
+        return std::sqrt (re * re + im * im);
+    };
+
+    const auto fundamental = level (1);
+    for (int h = 2; h <= 8; ++h)
+        std::printf ("H%d %6.1f dB\n", h, 20.0 * std::log10 (std::max (1.0e-9, level (h) / fundamental)));
+    return 0;
+}
+
 // Renders the editor to a PNG file at design size (scale 1) or larger.
 static int snapshot (const char* path, float scale)
 {
@@ -1220,6 +1475,9 @@ int main (int argc, char** argv)
 
     if (argc >= 3 && std::string_view (argv[1]) == "--snapshot")
         return snapshot (argv[2], argc >= 4 ? (float) std::atof (argv[3]) : 1.0f);
+
+    if (argc == 3 && std::string_view (argv[1]) == "--harmonics")
+        return harmonics (std::atoi (argv[2]));
 
     if (argc == 3 && std::string_view (argv[1]) == "--icon")
         return renderIcon (argv[2], 1024);
@@ -1263,6 +1521,9 @@ int main (int argc, char** argv)
     testStepTracks();
     testPhase3Sequencing();
     testUserScalesAndKeyboard();
+    testVersion02();
+    testTransposeReloadDrift();
+    testHardwareFeatures();
 
     std::printf ("\n%s (%d failure%s)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures, failures == 1 ? "" : "s");
     return failures == 0 ? 0 : 1;

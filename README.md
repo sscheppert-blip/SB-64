@@ -3,12 +3,12 @@
 Analog-style acid bassline synthesizer plugin with a 64-step sequencer. AU, VST3, CLAP and standalone
 for macOS, Windows and Linux, built with JUCE.
 
-> **Status: early version (0.1).** Everything works; fine sound tuning and factory presets are
-> still to come. Downloads under **Releases**.
+> **Status: early version (0.2).** Everything works; fine sound tuning by ear is still going on.
+> Downloads under **Releases**.
 
 **Manual:** [English](docs/Manual.md) · [Deutsch](docs/Handbuch.md)
 
-![SB-64 panel mockup – coming soon](docs/images/panel-coming-soon.png)
+![SB-64 front panel](docs/images/panel.png)
 
 ## Features
 
@@ -22,8 +22,10 @@ for macOS, Windows and Linux, built with JUCE.
 - **Sequencer:** up to 64 steps with per-step gate, accent, slide, cutoff modulation, pitch envelope,
   probability and micro-tuning; play directions, swing, transpose, scales (incl. microtonal user scales),
   arpeggiator and a random pattern generator
-- **Memory:** 8 banks × 16 patterns, pattern chaining
-- **MIDI:** play it from a keyboard, sync to the host tempo
+- **Memory:** 8 banks × 16 patterns, each with its own play direction and first/last step; pattern chaining
+- **Factory sounds:** 16 sounds, on the panel and as host programs
+- **MIDI:** play it from a keyboard, sync to the host tempo, pick patterns by program change; the
+  sequencer and arpeggiator send their notes to MIDI out
 
 ## Installation
 

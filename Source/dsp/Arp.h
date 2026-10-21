@@ -1,5 +1,6 @@
 #pragma once
 
+#include "NoteListener.h"
 #include "Scales.h"
 #include "Voice.h"
 
@@ -22,8 +23,12 @@ namespace sb64::seq
         int octaves = 1;          // 1..3
         int gate = 50;            // percent of a 16th
         int rhythm = 0;           // 0 .. numArpRhythms - 1
-        bool scaleSource = false; // false: the held notes; true: the scale from the lowest held note
+        enum class Source { keys, scale, pattern };
+        Source source = Source::keys;   // the held notes, the scale from the lowest held note, or the
+                                        // pattern's notes in step order (moved by the lowest key − C3)
         int scale = 0;
+        const int* patternNotes = nullptr;
+        int numPatternNotes = 0;
         const UserScales* users = nullptr;
     };
 
@@ -42,6 +47,7 @@ namespace sb64::seq
         void stop (dsp::Voice&) noexcept;
 
         bool isPlaying() const noexcept { return active; }
+        void setListener (NoteListener* l) noexcept { listener = l; }
 
         // for the tests: the notes of one pass
         static std::vector<int> sequence (const std::vector<int>& held, const ArpSettings&);
@@ -52,6 +58,7 @@ namespace sb64::seq
         static int build (const int* held, int count, const ArpSettings&, Notes& out) noexcept;
 
         Notes notes {};
+        NoteListener* listener = nullptr;
         double sampleRate = 48000.0, samplesToNext = 0.0, gateCountdown = -1.0;
         bool active = false, sounding = false;
         int64_t tick = 0, played = 0;

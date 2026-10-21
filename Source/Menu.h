@@ -14,6 +14,9 @@ namespace sb64::menu
 
     const std::vector<Item>& items();
 
+    // the one menu item that isn't a parameter: the factory sound (the panel handles it)
+    inline constexpr const char* presetItem = "preset";
+
     // the parameter's current value as display text (three characters, upper case)
     juce::String valueText (juce::AudioProcessorValueTreeState&, const juce::String& paramId);
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <juce_data_structures/juce_data_structures.h>
 
 #include "dsp/Pattern.h"
@@ -28,6 +29,10 @@ namespace sb64
         // whenPlaying: wait for the end of the playing pattern; ends a chain
         void select (int index, bool whenPlaying) noexcept;
 
+        // the selected pattern as it was when it was picked (or the project loaded): RELOAD goes back there
+        void reload() noexcept;
+        bool canReload() const noexcept { return snapshotIndex == selectedIndex(); }
+
         // chain: after the selected pattern the next ones of the chain follow, pass by pass (not saved)
         static constexpr int maxChain = 16;
         void addToChain (int index) noexcept;
@@ -44,7 +49,7 @@ namespace sb64
         juce::ValueTree toTree() const;
         void fromTree (const juce::ValueTree&);   // invalid tree = factory state
 
-        // the first pattern of a new instance: a short acid line
+        // a short acid line (render tool and tests)
         static void writeDemo (seq::Pattern&);
 
         static juce::String stepsToString (const seq::Pattern&);
@@ -52,6 +57,10 @@ namespace sb64
 
     private:
         std::array<seq::Pattern, numPatterns> patterns;
+        void takeSnapshot() noexcept;
+        seq::Pattern snapshot;
+        int snapshotIndex = -1;
+
         std::atomic<int> current { 0 }, queued { -1 };
         std::array<std::atomic<int>, maxChain> chain {};
         std::atomic<int> chainSize { 0 }, chainPosition { 0 };

@@ -66,7 +66,13 @@ namespace sb64::dsp
         }
     }
 
-    float cutoffHz (float knob) noexcept         { return 30.0f * std::exp2 (std::clamp (knob, 0.0f, 1.0f) * 9.2f); }
+    float cutoffHz (float knob) noexcept
+    {
+        // like the hardware, the bottom fifth of the knob (below 9 o'clock) barely moves the filter
+        const auto k = std::clamp (knob, 0.0f, 1.0f);
+        const auto position = k < 0.2f ? k / 0.2f * 0.06f : 0.06f + (k - 0.2f) / 0.8f * 0.94f;
+        return 30.0f * std::exp2 (position * 9.2f);
+    }
     float vcfDecaySeconds (float knob) noexcept  { return 0.03f * std::pow (100.0f, std::clamp (knob, 0.0f, 1.0f)); }
     float lfoHz (float knob) noexcept            { return 0.05f * std::exp2 (std::clamp (knob, 0.0f, 1.0f) * 15.3f); }
     float pitchEnvSeconds (float knob) noexcept  { return 0.01f * std::pow (30.0f, std::clamp (knob, 0.0f, 1.0f)); }
@@ -95,6 +101,7 @@ namespace sb64::dsp
         ensembleToneCoef = (float) (1.0 - std::exp (-twoPi * 6000.0 / rate));
         lowShelfCoef = (float) (1.0 - std::exp (-twoPi * 120.0 / rate));
         dcCoef = (float) std::exp (-twoPi * 8.0 / rate);
+        driftCoef = (float) (1.0 - std::exp (-1.0 / (0.4 * rate)));
 
         lfo.prepare (rate);
         panic();
@@ -173,6 +180,9 @@ namespace sb64::dsp
         slidePos = 1.0f;
         gate = true;
 
+        // every new note lands a few cents off, like an analog oscillator
+        noteDrift = driftRandom() * settings.drift * 0.04f;
+
         // the envelopes restart from their current level (no click)
         vca.stage = Envelope::Stage::attack;
         vcf.stage = Envelope::Stage::attack;
@@ -182,6 +192,12 @@ namespace sb64::dsp
 
         if (settings.lfoReset)
             lfo.setPhase (settings.lfoStartPhase);
+    }
+
+    float Voice::driftRandom() noexcept
+    {
+        driftSeed = driftSeed * 1664525u + 1013904223u;
+        return (float) (driftSeed >> 8) / 8388608.0f - 1.0f;
     }
 
     void Voice::noteOff() noexcept
@@ -251,7 +267,9 @@ namespace sb64::dsp
         const auto sub = (subPhase < 0.5f ? 1.0f : -1.0f) + blep (subPhase, dt * 0.5f) - blep (subFall, dt * 0.5f);
 
         const auto osc = detuneEnsemble (wave);
-        return 0.55f * osc + 0.55f * subLevel.value * sub;
+        // the transistor sub gets weaker on the lowest notes: half as loud at C0, full from C2
+        const auto subGain = std::clamp (0.5f + (note - 12.0f) / 48.0f, 0.5f, 1.0f);
+        return 0.55f * osc + 0.55f * subLevel.value * subGain * sub;
     }
 
     float Voice::detuneEnsemble (float x) noexcept
@@ -333,8 +351,24 @@ namespace sb64::dsp
             note = slideFrom + (slideTo - slideFrom) * y;
         }
 
+        // drift: a new target every quarter second, approached slowly
+        if (settings.drift > 0.0f)
+        {
+            if (--driftCountdown <= 0)
+            {
+                driftCountdown = (int) (0.25 * sampleRate);
+                driftPitchTarget = driftRandom();
+                driftCutoffTarget = driftRandom();
+            }
+
+            driftPitch += (driftPitchTarget - driftPitch) * driftCoef;
+            driftCutoff += (driftCutoffTarget - driftCutoff) * driftCoef;
+        }
+
+        const auto drifting = settings.drift * (driftPitch * 0.08f) + noteDrift;
+
         pitchEnv *= pitchEnvCoef;
-        const auto semitones = note + bend + pitchEnv * pitchEnvRange + fmDepth.value * 12.0f * lfoValue;
+        const auto semitones = note + drifting + bend + pitchEnv * pitchEnvRange + fmDepth.value * 12.0f * lfoValue;
         const auto frequency = std::clamp ((440.0f + settings.tuneHz) * std::exp2 ((semitones - 69.0f) / 12.0f),
                                            1.0f, 0.45f * (float) sampleRate);
 
@@ -365,7 +399,7 @@ namespace sb64::dsp
         // sources into the filter
         const auto in = oscillator (frequency) + 0.6f * noiseLevel.value * noise();
 
-        const auto cutoffOctaves = cutoffOct.value + cutoffOffset + vcf.level * (envAmount.value + accentOpen.value)
+        const auto cutoffOctaves = cutoffOct.value + cutoffOffset + settings.drift * driftCutoff * 0.15f + vcf.level * (envAmount.value + accentOpen.value)
                                  + lfoLevel.value * lfoValue;
         const auto filtered = filter (in, std::exp2 (std::min (cutoffOctaves, 15.0f)));
 

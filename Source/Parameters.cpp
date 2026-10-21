@@ -62,7 +62,7 @@ namespace sb64::params
         });
         addKnob (layout, id::vcfEnv, "VCF Env", 0.35f, [] (float v, int) { return seconds (dsp::vcfDecaySeconds (v)); });
         addKnob (layout, id::resonance, "Resonance", 0.6f);
-        addKnob (layout, id::cutoff, "Cutoff", 0.35f, [] (float v, int) { return hz (dsp::cutoffHz (v)); });
+        addKnob (layout, id::cutoff, "Cutoff", 0.45f, [] (float v, int) { return hz (dsp::cutoffHz (v)); });
         addKnob (layout, id::fmLevel, "FM Level", 0.0f);
         addKnob (layout, id::subLevel, "Sub Level", 0.0f);
         addKnob (layout, id::noiseLevel, "Noise Level", 0.0f);
@@ -87,12 +87,7 @@ namespace sb64::params
             juce::ParameterID { id::lfoPhase, 1 }, "LFO Phase", 0, 7, 0,
             juce::AudioParameterIntAttributes().withStringFromValueFunction ([] (int v, int) { return juce::String (v * 45) + juce::String::fromUTF8 ("\xc2\xb0"); })));
 
-        layout.add (std::make_unique<juce::AudioParameterFloat> (
-            juce::ParameterID { id::slideTime, 1 }, "Slide Time", juce::NormalisableRange<float> (10.0f, 500.0f, 1.0f, 0.5f), 90.0f,
-            juce::AudioParameterFloatAttributes().withLabel ("ms")));
         layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::accentVel, 1 }, "Accent Velocity", 1, 127, 100));
-        layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::pitchEnvDepth, 1 }, "Pitch Env Depth", 0, 9, 0));
-        addKnob (layout, id::pitchEnvDecay, "Pitch Env Decay", 0.4f, [] (float v, int) { return seconds (dsp::pitchEnvSeconds (v)); });
         layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::bendRange, 1 }, "Bend Range", 0, 12, 2,
                                                                juce::AudioParameterIntAttributes().withLabel ("st")));
         layout.add (std::make_unique<juce::AudioParameterFloat> (
@@ -108,18 +103,20 @@ namespace sb64::params
                                                                   juce::StringArray { "Internal", "Host" }, standalone ? 0 : 1));
         layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::swing, 1 }, "Swing", 0, 50, 0,
                                                                juce::AudioParameterIntAttributes().withLabel ("%")));
-        layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { id::playMode, 1 }, "Play Mode",
-                                                                  juce::StringArray { "Forward", "Backward", "Random", "Ping-Pong", "Ping-Pong 2" }, 0));
         layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::transpose, 1 }, "Transpose", -24, 24, 0,
                                                                juce::AudioParameterIntAttributes().withLabel ("st")));
         layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { id::scale, 1 }, "Scale", scaleChoices(), 0));
         layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { id::root, 1 }, "Scale Root",
                                                                   juce::StringArray { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }, 0));
 
-        layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::masterSlide, 1 }, "Master Slide", 0, 100, 0,
+        layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { id::transposeLatch, 1 }, "Transpose Latch", true));
+        layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::masterSlide, 1 }, "Master Slide", 10, 100, 50,
                                                                juce::AudioParameterIntAttributes().withLabel ("%")));
 
         layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { id::arp, 1 }, "Arpeggiator", false));
+        layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::arpTempo, 1 }, "Arp Tempo", 0, 480, 0,
+                                                               juce::AudioParameterIntAttributes().withStringFromValueFunction (
+                                                                   [] (int v, int) { return v < 20 ? juce::String ("Sequencer") : juce::String (v) + " BPM"; })));
         layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { id::arpDir, 1 }, "Arp Direction",
                                                                   juce::StringArray { "Up", "Down", "Up & Down", "Random" }, 0));
         layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::arpOct, 1 }, "Arp Octaves", 1, 3, 1));
@@ -127,7 +124,7 @@ namespace sb64::params
                                                                juce::AudioParameterIntAttributes().withLabel ("%")));
         layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::arpRhythm, 1 }, "Arp Rhythm", 1, 6, 1));
         layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { id::arpSource, 1 }, "Arp Source",
-                                                                  juce::StringArray { "Keys", "Scale" }, 0));
+                                                                  juce::StringArray { "Keys", "Scale", "Pattern" }, 0));
 
         layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::rndDensity, 1 }, "Random Density", 10, 90, 70,
                                                                juce::AudioParameterIntAttributes().withLabel ("%")));
@@ -136,7 +133,15 @@ namespace sb64::params
         layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::rndSlide, 1 }, "Random Slides", 0, 100, 20,
                                                                juce::AudioParameterIntAttributes().withLabel ("%")));
         layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::rndOctaves, 1 }, "Random Octaves", 1, 3, 1));
-        layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::rndMod, 1 }, "Random Mod", 0, 64, 0));
+        layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::rndMod, 1 }, "Random Mod", 0, 50, 0));
+        layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::rndPitchEnv, 1 }, "Random Pitch Env", 0, 100, 0,
+                                                               juce::AudioParameterIntAttributes().withLabel ("%")));
+        layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::rndChance, 1 }, "Random Chance", 0, 100, 0,
+                                                               juce::AudioParameterIntAttributes().withLabel ("%")));
+        layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::rndGateLow, 1 }, "Random Gate Low", 10, 100, 30,
+                                                               juce::AudioParameterIntAttributes().withLabel ("%")));
+        layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id::rndGateHigh, 1 }, "Random Gate High", 10, 100, 70,
+                                                               juce::AudioParameterIntAttributes().withLabel ("%")));
 
         return layout;
     }

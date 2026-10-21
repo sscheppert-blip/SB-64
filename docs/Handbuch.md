@@ -93,14 +93,15 @@ Nur bei Quellen machen, denen du vertraust.
 
 ## 3. Erste Schritte
 
-1. SB-64 auf eine Instrumentenspur legen.
-2. **PLAY** (das Dreieck) drücken. Im ersten Pattern **A1** liegt eine kleine Acid-Line.
+1. SB-64 auf eine Instrumentenspur legen. Wie die Hardware startet er mit leeren Patterns.
+2. Ein paar Step-Tasten klicken: Jeder Step geht an (C3, 10 % Gate) und blinkt. **BACK/NOTE** dreht
+   seinen Ton, **SELECT/GATE** seine Länge. Noch ein Klick auf denselben Step schaltet ihn aus.
+   Schneller geht's mit **SHIFT + RND PATT** – der würfelt ein ganzes Pattern.
+3. **PLAY** (das Dreieck) drücken.
    - Im Plugin steht die Uhr ab Werk auf **Host**: PLAY blinkt, bis die DAW läuft. Standalone läuft
      sofort mit eigenem Tempo.
-3. An **CUTOFF**, **RESONANCE**, **VCF ENV** und **ENV/CV LVL** drehen – das ist der Acid-Kern.
-4. **DRIVE** langsam aufziehen. Dann **DETUNE**.
-5. Eine Step-Taste klicken: Der Step geht an und blinkt. **BACK/NOTE** dreht seinen Ton,
-   **SELECT/GATE** seine Länge. Noch ein Klick auf denselben Step schaltet ihn aus.
+4. An **CUTOFF**, **RESONANCE**, **VCF ENV** und **ENV/CV LVL** drehen – das ist der Acid-Kern.
+5. **DRIVE** langsam aufziehen. Dann **DETUNE**. Oder im Menü unter `PRS` einen Werks-Sound laden.
 
 Bedienhilfen für die Maus:
 
@@ -126,6 +127,8 @@ Noise ────────────────────────�
   Stück. Er ist an oder aus, kein Mengenregler.
 - **Slide** gleitet zum nächsten Ton, die Hüllkurven laufen dabei weiter. **Gate 100 %** verbindet zwei
   Töne ohne neuen Anschlag (legato), aber ohne Gleiten.
+- Wie echte Analogtechnik **driftet** SB-64 ein wenig: Tonhöhe und Filter wandern leicht, jede Note
+  sitzt ein paar Cent anders.
 - Die **Pitch-Hüllkurve** springt am Notenanfang nach oben (bis drei Oktaven) und fällt schnell zurück –
   der klassische „Peow“.
 
@@ -144,18 +147,18 @@ Noise ────────────────────────�
 | **Filter-Schalter** | **BP** (Bandpass) / **LP** (Tiefpass). |
 | **VCF ENV** | Ausklingzeit der Filterhüllkurve, 30 ms bis 3 s. |
 | **RESONANCE** | Filterresonanz bis zur Selbstoszillation. |
-| **CUTOFF** | Filterfrequenz, ca. 30 Hz bis 17,6 kHz. |
+| **CUTOFF** | Filterfrequenz, ca. 30 Hz bis 17,6 kHz. Wie bei der Hardware tut sich im untersten Fünftel (unter 9 Uhr) kaum etwas. |
 
 ### Untere Reihe
 
 | Regler | Was er tut |
 |---|---|
 | **FM LVL** | Wie stark die LFO die Tonhöhe moduliert. |
-| **SUB LVL** | Lautstärke des Sub-Oszillators (Rechteck eine Oktave tiefer). |
+| **SUB LVL** | Lautstärke des Sub-Oszillators (Rechteck eine Oktave tiefer). Wie das Transistor-Original wird er auf den tiefsten Tönen schwächer. |
 | **NOISE LVL** | Weißes Rauschen ins Filter. |
 | **SELECT/GATE** | Encoder: ist ein Step gewählt, sein Gate (bzw. Wahrscheinlichkeit/Cent, s. u.); sonst blättert er durchs Menü. |
 | **BACK/NOTE** | Encoder: Ton des gewählten Steps, sonst Wert des Menüpunkts. **Klick = BACK**. |
-| **LFO RATE** | LFO-Tempo frei 0,05 Hz bis 2 kHz – oder mit SYN an in Notenwerten. |
+| **LFO RATE** | LFO-Tempo frei 0,05 Hz bis 2 kHz – oder mit SYN an in Notenwerten. Beim Drehen (und in den LFO-Menüpunkten) zeigen die Step-Tasten die LFO als Lauflicht. |
 | **LFO LVL** | Wie stark die LFO das Filter moduliert. |
 | **ENV/CV LVL** | Wie stark die Filterhüllkurve den Cutoff öffnet. |
 
@@ -185,11 +188,27 @@ Alles ohne eigenen Knopf liegt im Menü. **SELECT/GATE** drehen (ohne gewählten
 Display zeigt kurz den Namen (z. B. `SWG`) und dann den Wert. **BACK/NOTE** ändert den Wert. Nach
 fünf Sekunden ohne Bedienung geht das Menü wieder zu, ein Klick auf BACK/NOTE schließt es sofort.
 
-Reihenfolge: `BPM CLK SWG PLY TRP SCL KEY MSL ARP ADR AOC AGT ARH ASR DNS RAC RSL ROC RMD LFO SYN RNG
-RST PHS SLD ACC PED PET BND TUN VOL`. Was jeder Punkt tut: [Parameterliste](#14-parameterliste).
+Reihenfolge: `PRS BPM CLK SWG TRP SCL KEY TLT MSL ARP ABP ADR AOC AGT ARH ASR DNS RAC RSL ROC RMD RPE
+RPR RGL RGH LFO SYN RNG RST PHS ACC BND TUN VOL`. Was jeder Punkt tut: [Parameterliste](#14-parameterliste).
 
-Viele SHIFT-Funktionen springen direkt an die richtige Stelle (SHIFT + LFO → `LFO`, SHIFT + PLAY MODE
-→ `PLY` usw.).
+Einige SHIFT-Funktionen springen direkt an die richtige Stelle (SHIFT + LFO → `LFO`, SHIFT + SCALE →
+`SCL`).
+
+### Factory-Sounds (PRS)
+
+Der erste Menüpunkt `PRS` lädt einen von 16 Werks-Sounds – nur die Klangregler, Patterns und Tempo
+bleiben. In der DAW stehen sie auch als Programme in der Preset-Liste.
+
+| Code | Sound | | Code | Sound |
+|---|---|---|---|---|
+| `INI` | Init | | `PLK` | Pluck – kurz und perkussiv |
+| `ACD` | Classic Acid | | `HAT` | Noise Hat – Rauschen statt Ton |
+| `SQR` | Square Squelch | | `DRN` | Drone – hört nie auf |
+| `RUB` | Rubber Bass – Dreieck + Sub | | `WOB` | Wobble – Sync-LFO aufs Filter |
+| `SWM` | Swarm – Detune-Schwarm | | `STP` | Stepper – Treppen-LFO pro Ton |
+| `DRV` | Overdrive | | `SUB` | Deep Sub |
+| `BPZ` | Band Zap – Bandpass | | `SHR` | Random Steps – S&H aufs Filter |
+| `MTL` | Metal FM – Audio-FM | | `WHS` | Whistle – Bandpass-Pfeifen |
 
 ---
 
@@ -208,6 +227,17 @@ Abspielpunkt, bis du BAR drückst.
 - **Noch ein Klick auf den gewählten Step:** schaltet ihn aus.
 - **BACK** verlässt den Step.
 
+### Transponieren
+
+Live transponieren wie am Gerät:
+
+- **SHIFT + TRANSP** schaltet die Tasten in den Transpose-Modus (Display `T+0`). Taste 1 = keine
+  Änderung, Taste 2 = +1 Halbton … Taste 13 = +12. **±1 OCT** legt eine Oktave drauf oder runter
+  (`O-1`). **Taste 16** setzt zurück. BACK oder nochmal SHIFT + TRANSP beendet den Modus.
+- **Latch** (`TLT`, ab Werk an): die Transposition bleibt. Mit `TLT OFF` gilt sie nur, solange die
+  Taste gedrückt ist – zum Antippen kurzer Rückungen.
+- `TRP` im Menü ist ein fester Versatz zusätzlich (±24), z. B. für den ganzen Song.
+
 ### Wahrscheinlichkeit (PRB)
 
 | Wert | Bedeutung |
@@ -219,8 +249,11 @@ Abspielpunkt, bis du BAR drückst.
 ### Länge, Laufrichtung, Tempo
 
 - **SHIFT + LAST STEP**, dann eine Step-Taste: letzter Step des Patterns (auch in Takt 2–4).
-- **SHIFT + PLAY MODE**: Laufrichtung `FWD` vorwärts, `BWD` rückwärts, `RND` zufällig, `PP` Ping-Pong
-  (Enden einmal), `PP2` Ping-Pong mit doppelten Enden.
+  **Zweimal SHIFT + LAST STEP** (Display `FST`), dann eine Taste: der **erste** Step – so spielt ein
+  Pattern zum Beispiel nur die Steps 5–12.
+- **SHIFT + PLAY MODE**, dann Taste 1–5: Laufrichtung dieses Patterns – `FWD` vorwärts, `BWD` rückwärts,
+  `RND` zufällig, `PP` Ping-Pong (Enden einmal), `PP2` Ping-Pong mit doppelten Enden. Jedes Pattern
+  merkt sich seine eigene.
 - Tempo `BPM` 20–480 (bei eigener Uhr), `SWG` Swing 0–50 % auf jedem zweiten 16tel.
 
 ### Aufnehmen (REC)
@@ -237,7 +270,7 @@ Klicken = Accent. Töne per MIDI-Keyboard gehen genauso.
 
 **SHIFT + REC** macht die Step-Tasten zur Klaviatur, ohne aufzunehmen (`KBD`). Nochmal SHIFT + REC
 oder BACK beendet ihn. Gebundenes Spielen (Taste halten, nächste drücken) gleitet; wie lange, stellt
-**MSL** (Master Slide) im Menü ein: `OFF` = Slide-Zeit `SLD`, 10–100 = Anteil eines 16tels im Tempo.
+**MSL** (Master Slide) im Menü ein: 10–100 % eines 16tels im Tempo. Das gilt auch für MIDI-Noten.
 
 ---
 
@@ -247,11 +280,11 @@ oder BACK beendet ihn. Gebundenes Spielen (Taste halten, nächste drücken) glei
 |---|---|
 | 1 **ACC** | Tasten setzen/löschen Accents. BACK beendet. |
 | 2 **SLIDE** | Tasten setzen/löschen Slides. |
-| 3 **MOD** | Taste wählt einen Step, **NOTE** stellt seinen Cutoff-Versatz −64…+63 ein (SELECT in groben Schritten). Steps mit Versatz leuchten. |
-| 4 **PITCH ENV** | Taste wählt einen Step, **NOTE** = Tiefe 1–9 (`PE5`), **SELECT** = Abklingzeit 0–9 (`DC4`). Tiefe aus = die Pitch-Hüllkurve aus dem Menü (`PED`/`PET`). |
-| 5 **LAST STEP** | Dann Step-Taste: letzter Step. |
-| 6 **PLAY MODE** | Öffnet `PLY`. |
-| 7 **TRANSP** | Öffnet `TRP`: transponiert den Sequencer (±24 Halbtöne) und den Arp. |
+| 3 **MOD** | Taste wählt einen Step, **NOTE** stellt seinen Cutoff-Versatz −64…+63 ein (SELECT in groben Schritten). Steps mit Versatz leuchten. **Live:** läuft der Sequencer und ist kein Step gewählt, schreibt das Drehen an NOTE/SELECT direkt in die gerade spielenden Steps – Filterfahrten einfach einschrauben. |
+| 4 **PITCH ENV** | Taste wählt einen Step, **NOTE** = Tiefe 1–9 (`PE5`), **SELECT** = Abklingzeit 0–9 (`DC4`). Tiefe 0 = keine Pitch-Hüllkurve. |
+| 5 **LAST STEP** | Dann Step-Taste: letzter Step. Zweimal: erster Step. |
+| 6 **PLAY MODE** | Dann Taste 1–5: FWD, BWD, RND, PP, PP2 für dieses Pattern. |
+| 7 **TRANSP** | Transpose-Modus: Tasten 1–13 transponieren um 0…+12 Halbtöne, ±1 OCT verschiebt um Oktaven, Taste 16 = zurück auf 0. Mehr in [Transponieren](#transponieren). |
 | 8 **SCALE** | Werks-Skala: öffnet `SCL`. User-Skala: Skalen-Editor (s. u.). |
 | 9 **ARPEGG** | Arpeggiator an/aus. |
 | 10 **LFO** | Öffnet die LFO-Einstellungen (`LFO`, dann weiterblättern). |
@@ -297,11 +330,12 @@ Step-Tasten) in 16teln im Sequencer-Tempo ab, beginnend mit dem ersten Tastendru
 
 | Menü | Werte |
 |---|---|
+| `ABP` Tempo | `SEQ` = Sequencer-Tempo, sonst eigenes Tempo 20–480 BPM |
 | `ADR` Richtung | `UP`, `DN`, `UD` (hoch und runter), `RND` |
 | `AOC` Oktaven | 1–3 |
 | `AGT` Gate | 10–100 % |
 | `ARH` Rhythmus | 1 jedes 16tel · 2 Achtel · 3 zwei an, eins aus · 4 3+3+2 · 5 drei an, eins aus · 6 eins aus, drei an |
-| `ASR` Quelle | `KEY` die gehaltenen Töne · `SCL` die gewählte Skala ab dem tiefsten gehaltenen Ton |
+| `ASR` Quelle | `KEY` die gehaltenen Töne · `SCL` die gewählte Skala ab dem tiefsten gehaltenen Ton · `PAT` die Töne des laufenden Patterns in Step-Reihenfolge, verschoben um die tiefste gehaltene Taste (C3 = Originallage) |
 
 `TRP` transponiert auch den Arp. Mit **REC** landen seine Töne im Pattern.
 
@@ -312,6 +346,9 @@ Step-Tasten) in 16teln im Sequencer-Tempo ab, beginnend mit dem ersten Tastendru
 - 8 Banks (A–H) × 16 Patterns = 128 Patterns, alle werden **mit dem Projekt gespeichert**.
 - **SHIFT + BANK**, Taste 1–8 wechselt die Bank (gleiche Pattern-Nummer).
   **SHIFT + PATTERN**, Taste 1–16 wechselt das Pattern. Leuchtende Tasten = Patterns mit Inhalt.
+- **Reload (Undo):** SHIFT + PATTERN und die Taste des *schon gewählten* Patterns (Display `RLD`) holt
+  es so zurück, wie es beim Auswählen war (bzw. beim Laden des Projekts) – verwirft also alle
+  Änderungen, auch ein RND PATT.
 - Während der Sequencer läuft, wechselt das neue Pattern erst am Ende des laufenden (Taste blinkt).
 - **Kette:** Nach SHIFT + PATTERN und der ersten Taste innerhalb von 2,5 Sekunden weitere Tasten
   drücken (Display `CHN`, `C2`, `C3` …). Die Patterns laufen dann nacheinander, immer im Kreis. Ein
@@ -330,15 +367,23 @@ SHIFT + RND PATT füllt die Steps zwischen erstem und letztem Step neu – mit T
 | `RSL` | Anteil mit Slide |
 | `ROC` | Tonumfang 1–3 Oktaven |
 | `RMD` | zufälliger Cutoff-Versatz bis ± diesen Wert (0 = aus) |
+| `RPE` | Anteil mit zufälliger Pitch-Hüllkurve |
+| `RPR` | Anteil mit zufälliger Wahrscheinlichkeit / Bedingung |
+| `RGL` / `RGH` | Gate-Bereich: kürzestes und längstes Gate |
 
-Tipp: Gefällt dir ein Pattern, vorher **COPY** – dann kannst du weiterwürfeln und zurück.
+Gefällt das Ergebnis nicht: **Reload** (SHIFT + PATTERN, Taste des aktuellen Patterns) holt das alte
+zurück. Gefällt dir ein Zwischenstand, vorher **COPY**.
 
 ---
 
 ## 12. MIDI und Host-Sync
 
 - **MIDI-Noten** spielen SB-64 direkt: monophon, der zuletzt gedrückte Ton gewinnt. Gebunden gespielt
-  gleitet er. Anschlagstärke ab `ACC` (Standard 100) = Accent. **Pitchbend** mit Bereich `BND`.
+  gleitet er (Dauer: `MSL`). Anschlagstärke ab `ACC` (Standard 100) = Accent. **Pitchbend** mit Bereich `BND`.
+- **Program Change** 0–127 wählt ein Pattern (A1 … H16) – läuft der Sequencer, am Ende des aktuellen.
+- **MIDI-Out:** Sequencer und Arp geben ihre Töne als MIDI aus (Kanal 1, Accent = Anschlag 127, Slides
+  überlappend). So steuert SB-64 andere Instrumente – in der DAW eine MIDI-Spur mit SB-64 als Eingang
+  anlegen. (Manche Hosts, z. B. Logic, nehmen MIDI von Instrumenten nicht an.)
 - **Uhr** `CLK`: `INT` = eigenes Tempo `BPM`; `HST` = folgt Tempo und Position der DAW (Loops und
   Springen inklusive). Mit HST wartet PLAY, bis die DAW läuft.
 - Die **LFO** läuft mit `SYN` an im Takt: `RNG LO` 1/64 bis 8 Zyklen pro Viertel, `RNG HI` 1/16 bis 32.
@@ -374,6 +419,12 @@ Tipp: Gefällt dir ein Pattern, vorher **COPY** – dann kannst du weiterwürfel
     −31 Cent. Plötzlich klingt Acid ganz woanders.
 14. **MOD-Spur als Filter-Accent.** SHIFT + MOD und auf Offbeats +30…+60 setzen – wie ein zweiter
     Accent, nur fürs Filter.
+15. **Filterfahrt live einschrauben.** Sequencer läuft, SHIFT + MOD, dann langsam an NOTE drehen – die
+    Fahrt landet Step für Step in der MOD-Spur und spielt ab der nächsten Runde von selbst.
+16. **Durch die Sounds blättern.** Ein Pattern laufen lassen, Menü auf `PRS` und mit NOTE alle 16
+    Werks-Sounds durchhören – dann von dort aus weiterschrauben.
+17. **Live rücken.** Pattern laufen lassen, SHIFT + TRANSP, `TLT OFF` – jetzt Tasten 1, 6, 8 kurz
+    halten wie bei einem Clubtrack-Breakdown.
 
 ---
 
@@ -395,32 +446,33 @@ Tipp: Gefällt dir ein Pattern, vorher **COPY** – dann kannst du weiterwürfel
 
 | Display | Parameter | Bereich |
 |---|---|---|
+| `PRS` | Factory-Sound | INI … WHS |
 | `BPM` | Tempo | 20–480 |
 | `CLK` | Uhr | INT / HST |
 | `SWG` | Swing | 0–50 % |
-| `PLY` | Laufrichtung | FWD, BWD, RND, PP, PP2 |
-| `TRP` | Transponieren | ±24 Halbtöne |
+| `TRP` | Transponieren (fest) | ±24 Halbtöne |
+| `TLT` | Transpose-Latch | ON / OFF |
 | `SCL` | Skala | CHR … BMI, U1–U16 |
 | `KEY` | Grundton | C – B |
-| `MSL` | Master Slide | OFF, 10–100 % eines 16tels |
+| `MSL` | Master Slide (Keyboard/MIDI legato) | 10–100 % eines 16tels |
 | `ARP` | Arpeggiator | ON / OFF |
+| `ABP` | Arp-Tempo | SEQ, 20–480 |
 | `ADR` | Arp-Richtung | UP, DN, UD, RND |
 | `AOC` | Arp-Oktaven | 1–3 |
 | `AGT` | Arp-Gate | 10–100 % |
 | `ARH` | Arp-Rhythmus | 1–6 |
-| `ASR` | Arp-Quelle | KEY / SCL |
+| `ASR` | Arp-Quelle | KEY / SCL / PAT |
 | `DNS` `RAC` `RSL` | Zufall: Dichte, Accents, Slides | % |
 | `ROC` | Zufall: Oktaven | 1–3 |
-| `RMD` | Zufall: Cutoff-Versatz | 0–64 |
+| `RMD` | Zufall: Cutoff-Versatz | 0–50 |
+| `RPE` `RPR` | Zufall: Pitch-Hüllkurven, Wahrscheinlichkeiten | % |
+| `RGL` `RGH` | Zufall: Gate-Bereich | 10–100 % |
 | `LFO` | LFO-Form | SIN, TRI, SAW, RMP, SQR, TDS, DST, TAR, S-H, NOS |
 | `SYN` | LFO synchron | ON / OFF |
 | `RNG` | LFO-Bereich (synchron) | LO / HI |
 | `RST` | LFO-Neustart pro Ton | ON / OFF |
 | `PHS` | LFO-Startphase | 0–315° |
-| `SLD` | Slide-Zeit (MIDI) | 10–500 ms |
 | `ACC` | Accent ab Anschlag | 1–127 |
-| `PED` | Pitch-Hüllkurve Tiefe (MIDI/Steps ohne eigene) | 0–9 |
-| `PET` | Pitch-Hüllkurve Abklingzeit | 10–300 ms |
 | `BND` | Pitchbend-Bereich | 0–12 Halbtöne |
 | `TUN` | Stimmung | ±10 Hz um 440 Hz |
 | `VOL` | Lautstärke | 0–100 |

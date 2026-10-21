@@ -37,11 +37,22 @@ namespace sb64::seq
             if (step.on)
             {
                 step.note = count > 0 && ! random.percent (30) ? notes[random.below (count)] : base;
-                step.gate = 30 + 10 * random.below (5);
+                const auto lo = std::clamp (std::min (s.gateLow, s.gateHigh), minGate, maxGate);
+                const auto hi = std::clamp (std::max (s.gateLow, s.gateHigh), minGate, maxGate);
+                step.gate = std::min (hi, lo + 5 * random.below ((hi - lo) / 5 + 1));
                 step.accent = random.percent (s.accent);
                 step.slide = random.percent (s.slide);
                 const auto range = std::clamp (s.mod, 0, 64);
                 step.mod = range > 0 ? std::clamp (random.below (2 * range + 1) - range, minMod, maxMod) : 0;
+
+                if (random.percent (s.pitchEnv))
+                {
+                    step.pitchDepth = 1 + random.below (maxPitchEnv);
+                    step.pitchDecay = random.below (maxPitchEnv + 1);
+                }
+
+                if (random.percent (s.chance))
+                    step.chance = 1 + random.below (numChances - 1);
             }
 
             pattern.set (i, step);

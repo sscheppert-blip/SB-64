@@ -51,6 +51,14 @@ namespace sb64::seq
         return (pass % 8) < (chance - firstRatio + 1);
     }
 
+    void Sequencer::ended (dsp::Voice& voice) noexcept
+    {
+        voice.noteOff();
+
+        if (listener != nullptr)
+            listener->noteEnded();
+    }
+
     int Sequencer::random (int n) noexcept
     {
         randomState ^= randomState << 13; randomState ^= randomState >> 17; randomState ^= randomState << 5;
@@ -68,7 +76,7 @@ namespace sb64::seq
     void Sequencer::stop (dsp::Voice& voice) noexcept
     {
         if (holding || gateCountdown >= 0.0)
-            voice.noteOff();
+            ended (voice);
 
         voice.setCutoffOffset (0.0f);
 
@@ -147,7 +155,7 @@ namespace sb64::seq
 
         if (gateCountdown >= 0.0 && --gateCountdown < 0.0)
         {
-            voice.noteOff();
+            ended (voice);
             holding = false;
         }
     }
@@ -181,7 +189,7 @@ namespace sb64::seq
 
         auto locate = [&]
         {
-            const auto cycle = (int64_t) passLength (options.mode, pattern->length());
+            const auto cycle = (int64_t) passLength ((PlayMode) pattern->playMode(), pattern->length());
 
             if (hostClock)
             {
@@ -224,15 +232,16 @@ namespace sb64::seq
             }
         }
 
-        position = options.mode == PlayMode::random ? pattern->first() + random (pattern->length())
-                                                     : std::clamp (stepInPass (options.mode, pattern->first(), pattern->last(), k),
+        const auto mode = (PlayMode) pattern->playMode();
+        position = mode == PlayMode::random ? pattern->first() + random (pattern->length())
+                                             : std::clamp (stepInPass (mode, pattern->first(), pattern->last(), k),
                                                                    pattern->first(), pattern->last());
         const auto step = pattern->get (position);
 
         if (! step.on || ! chancePlays (step.chance, thisPass, random (100)))
         {
             if (holding)
-                voice.noteOff();
+                ended (voice);
 
             holding = slideNext = false;
             gateCountdown = -1.0;
@@ -248,6 +257,9 @@ namespace sb64::seq
         const auto transition = holding ? (slideNext ? dsp::Transition::slide : dsp::Transition::legato)
                                         : dsp::Transition::retrigger;
         voice.noteOn ((float) note + detune + (float) step.cent * 0.01f, step.accent, transition, (float) (stepSamples / sampleRate));
+
+        if (listener != nullptr)
+            listener->noteStarted (note, step.accent);
 
         holding = true;
         slideNext = step.slide;

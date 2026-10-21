@@ -26,7 +26,7 @@ namespace sb64::seq
     struct Step
     {
         int note = 48;   // C3
-        int gate = 50;   // percent
+        int gate = 10;   // percent (a new step: C3 at 10 %, as on the hardware)
         bool on = false, accent = false, slide = false;
         int mod = 0;            // minMod .. maxMod
         int pitchDepth = 0;     // 0 = the menu's pitch envelope, 1..9 = this step's
@@ -89,6 +89,11 @@ namespace sb64::seq
                 steps[(size_t) index].store (step.pack(), std::memory_order_relaxed);
         }
 
+        // direction (see seq::PlayMode): forward, backward, random, ping-pong, ping-pong 2
+        static constexpr int numModes = 5;
+        int playMode() const noexcept { return mode.load (std::memory_order_relaxed); }
+        void setPlayMode (int m) noexcept { mode = std::clamp (m, 0, numModes - 1); }
+
         int first() const noexcept { return firstStep.load (std::memory_order_relaxed); }
         int last() const noexcept  { return lastStep.load (std::memory_order_relaxed); }
         int length() const noexcept { return last() - first() + 1; }
@@ -112,14 +117,21 @@ namespace sb64::seq
                 s.store (Step {}.pack(), std::memory_order_relaxed);
             firstStep = 0;
             lastStep = stepsPerBar - 1;
+            mode = 0;
         }
 
         bool isEmpty() const noexcept
         {
             for (int i = 0; i < maxSteps; ++i)
-                if (get (i) != Step {})
+            {
+                // an unused step may still carry the gate an older version gave new steps
+                auto step = get (i);
+                if (! step.on)
+                    step.gate = Step {}.gate;
+                if (step != Step {})
                     return false;
-            return first() == 0 && last() == stepsPerBar - 1;
+            }
+            return first() == 0 && last() == stepsPerBar - 1 && playMode() == 0;
         }
 
         void copyFrom (const Pattern& other) noexcept
@@ -128,11 +140,12 @@ namespace sb64::seq
                 set (i, other.get (i));
             firstStep = other.first();
             lastStep = other.last();
+            mode = other.playMode();
         }
 
     private:
         std::array<std::atomic<uint64_t>, maxSteps> steps;
-        std::atomic<int> firstStep { 0 }, lastStep { stepsPerBar - 1 };
+        std::atomic<int> firstStep { 0 }, lastStep { stepsPerBar - 1 }, mode { 0 };
     };
 
     // Where the sequencer gets its pattern from; a pattern change waits for the end of the pattern.

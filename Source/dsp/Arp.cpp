@@ -53,7 +53,15 @@ namespace sb64::seq
         if (numBase == 0)
             return 0;
 
-        if (s.scaleSource)
+        if (s.source == ArpSettings::Source::pattern && s.patternNotes != nullptr && s.numPatternNotes > 0)
+        {
+            // the pattern's notes in step order, moved by the lowest held key relative to C3
+            const auto shift = base[0] - 48;
+            numBase = 0;
+            for (int i = 0; i < std::min (s.numPatternNotes, (int) base.size()); ++i)
+                base[(size_t) numBase++] = std::clamp (s.patternNotes[i] + shift, 0, 127);
+        }
+        else if (s.source == ArpSettings::Source::scale)
         {
             // the scale from the lowest held note, one octave
             const auto root = base[0];
@@ -88,7 +96,11 @@ namespace sb64::seq
     void Arp::stop (dsp::Voice& voice) noexcept
     {
         if (sounding)
+        {
             voice.noteOff();
+            if (listener != nullptr)
+                listener->noteEnded();
+        }
 
         active = sounding = false;
         gateCountdown = -1.0;
@@ -133,8 +145,14 @@ namespace sb64::seq
                 ++played;
                 const auto note = std::clamp (notes[index] + transpose, 0, 127);
                 voice.setStepPitchEnvelope (-1, 0.0f);
+                if (sounding && listener != nullptr)
+                    listener->noteEnded();
+
                 voice.noteOn ((float) note, false, dsp::Transition::retrigger);
                 started = note;
+
+                if (listener != nullptr)
+                    listener->noteStarted (note, false);
                 sounding = true;
                 gateCountdown = std::clamp (s.gate, minGate, maxGate) * 0.01 * stepSamples;
             }
@@ -148,6 +166,9 @@ namespace sb64::seq
         {
             voice.noteOff();
             sounding = false;
+
+            if (listener != nullptr)
+                listener->noteEnded();
         }
 
         return started;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include "PluginProcessor.h"
 #include "ui/Widgets.h"
 
@@ -44,9 +45,9 @@ public:
 
 private:
     // what the step keys do without SHIFT
-    enum class KeyMode { steps, accent, slide, mod, pitchEnv, scale };
+    enum class KeyMode { steps, accent, slide, mod, pitchEnv, scale, transpose };
     // a function waiting for a step key; after a pattern, further keys chain patterns for a while
-    enum class Pending { none, lastStep, bank, pattern, chain, clear };
+    enum class Pending { none, lastStep, firstStep, playMode, bank, pattern, chain, clear };
     // what SELECT/GATE changes on the selected step (a click on the encoder switches)
     enum class StepField { gate, chance, cent };
 
@@ -98,6 +99,16 @@ private:
     StepField stepField = StepField::gate;
     double chainUntil = 0.0;
     bool keyboard = false;
+    int transposeOctave = 0, transposeKey = -1;   // KeyMode::transpose
+
+    // MOD live: while the sequence runs, turning the encoders in MOD mode writes into the playing steps
+    bool liveMod (int steps);
+    int liveModValue = 0, liveModStep = -1;
+    double liveModUntil = 0.0;
+
+    // LFO RATE shown as a running light on the keys
+    double lfoViewUntil = 0.0;
+    bool showsLfo (double now) const;
     int scaleDegree = -1;   // the user scale's note being edited (KeyMode::scale)
     int editedScale() const;
     int bar = 0, selectedStep = -1;
