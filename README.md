@@ -6,7 +6,7 @@ for macOS, Windows and Linux, built with JUCE.
 > **Status: early version (0.2.1).** Everything works; fine sound tuning by ear is still going on.
 > Downloads under **Releases**.
 
-**Manual:** [English](docs/Manual.md) · [Deutsch](docs/Handbuch.md)
+**Manual:** [English](docs/Manual.md) · [Deutsch](docs/Handbuch.md) · **Schnellstart (German quick start):** [docs/Schnellstart.md](docs/Schnellstart.md)
 
 ![SB-64 front panel](docs/images/panel.png)
 
